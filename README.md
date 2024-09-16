@@ -34,13 +34,13 @@ After activation, your terminal prompt should change to show that you are now wo
 
 ### Step 3: Install Required Dependencies
 
-Once the virtual environment is activated, install any required packages (e.g., `numpy`) by running:
+Once the virtual environment is activated, install the required packages from the `requirements.txt` file:
 
 ```bash
-pip install numpy
+pip install -r requirements.txt
 ```
 
-You can also install any other project dependencies in this environment using `pip`.
+This will install all the dependencies specified in the `requirements.txt` file.
 
 ### Step 4: Deactivate the Virtual Environment
 
@@ -52,13 +52,4 @@ deactivate
 
 This will return you to your system's default Python environment.
 
-## Additional Notes
-
-- To install additional packages, use `pip install <package_name>` while inside the virtual environment.
-- If you ever want to remove the virtual environment, simply delete the `CellCounting/` folder.
-
-## Troubleshooting
-
-- If you encounter an error such as `source: no such file or directory`, make sure you're pointing to the correct path where the `bin/activate` script is located.
-- Ensure that you are using Python 3. If you're unsure, you can check by running `python3 --version` in your terminal.
 
