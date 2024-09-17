@@ -8,6 +8,7 @@ import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from abc import ABC, abstractmethod
 
 from PyQt5.QtWidgets import (
     QApplication,
@@ -25,12 +26,80 @@ from PyQt5.QtWidgets import (
     QLabel,
     QDockWidget,
     QDialog,
-    QComboBox,  # Added for colormap selection
+    QComboBox,
+    QCheckBox,
+    QMessageBox,  # Added for error messages
 )
 from PyQt5.QtGui import QPixmap, QImage, QPen, QColor, QKeySequence
 from PyQt5.QtCore import Qt, QEvent, QRectF, QThread, pyqtSignal, QMutex, QMutexLocker
 
-from PIL import Image
+from PIL import Image, ImageEnhance  # Removed ImageFilter as we use OpenCV now
+
+
+class Action(ABC):
+    @abstractmethod
+    def undo(self):
+        pass
+
+    @abstractmethod
+    def redo(self):
+        pass
+
+
+class AddLabelAction(Action):
+    def __init__(self, image_labeler, label_item):
+        self.image_labeler = image_labeler
+        self.label_item = label_item
+
+    def undo(self):
+        self.image_labeler.labels.remove(self.label_item)
+        if self.label_item.scene():
+            self.image_labeler.scene.removeItem(self.label_item)
+        if not self.image_labeler.dot_view:
+            self.image_labeler.update_gaussian_overlay()
+
+    def redo(self):
+        self.image_labeler.labels.append(self.label_item)
+        self.label_item.setParentItem(self.image_labeler.pixmap_item)
+        if not self.image_labeler.dot_view:
+            self.image_labeler.update_gaussian_overlay()
+
+
+class DeleteLabelAction(Action):
+    def __init__(self, image_labeler, label_item):
+        self.image_labeler = image_labeler
+        self.label_item = label_item
+
+    def undo(self):
+        self.image_labeler.labels.append(self.label_item)
+        self.label_item.setParentItem(self.image_labeler.pixmap_item)
+        if not self.image_labeler.dot_view:
+            self.image_labeler.update_gaussian_overlay()
+
+    def redo(self):
+        self.image_labeler.labels.remove(self.label_item)
+        if self.label_item.scene():
+            self.image_labeler.scene.removeItem(self.label_item)
+        if not self.image_labeler.dot_view:
+            self.image_labeler.update_gaussian_overlay()
+
+
+class MoveLabelAction(Action):
+    def __init__(self, image_labeler, label_item, old_pos, new_pos):
+        self.image_labeler = image_labeler
+        self.label_item = label_item
+        self.old_pos = old_pos
+        self.new_pos = new_pos
+
+    def undo(self):
+        self.label_item.setPos(self.old_pos)
+        if not self.image_labeler.dot_view:
+            self.image_labeler.update_gaussian_overlay()
+
+    def redo(self):
+        self.label_item.setPos(self.new_pos)
+        if not self.image_labeler.dot_view:
+            self.image_labeler.update_gaussian_overlay()
 
 
 class LabelItem(QGraphicsEllipseItem):
@@ -74,6 +143,7 @@ class LabelItem(QGraphicsEllipseItem):
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             QApplication.setOverrideCursor(Qt.ClosedHandCursor)
+            self.start_pos = self.pos()  # Record starting position
         elif event.button() == Qt.RightButton:
             # Right-click to delete the label
             if self.parent:
@@ -84,6 +154,12 @@ class LabelItem(QGraphicsEllipseItem):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             QApplication.restoreOverrideCursor()
+            end_pos = self.pos()
+            if self.start_pos != end_pos:
+                # Record move action
+                action = MoveLabelAction(self.parent, self, self.start_pos, end_pos)
+                self.parent.undo_stack.append(action)
+                self.parent.redo_stack.clear()
         super().mouseReleaseEvent(event)
 
 
@@ -234,6 +310,15 @@ class ImageLabeler(QMainWindow):
         self.colormap_name = "jet"
         self.gaussian_worker_id = 0
 
+        # Undo/Redo stacks
+        self.undo_stack = []
+        self.redo_stack = []
+
+        # Image filter settings
+        self.brightness = 0
+        self.contrast = 0
+        self.original_image = None  # PIL Image
+
         # List of available colormaps
         self.available_colormaps = [
             "viridis",
@@ -260,16 +345,25 @@ class ImageLabeler(QMainWindow):
 
     def select_folders(self):
         """
-        Prompt the user to select the image and label folders.
+        Prompt the user to select the parent folder containing 'images' and 'ground_truth' subdirectories.
         """
-        project_folder= QFileDialog.getExistingDirectory(
-            self, "Select Project Folder"
+        parent_folder = QFileDialog.getExistingDirectory(
+            self, "Select Parent Folder (containing 'images' and 'ground_truth' subfolders)"
         )
-        if not project_folder:
+        if not parent_folder:
             sys.exit()
 
-        self.image_folder = project_folder + '/images'
-        self.label_folder = project_folder + '/ground_truth'
+        self.image_folder = os.path.join(parent_folder, "images")
+        self.label_folder = os.path.join(parent_folder, "ground_truth")
+
+        # Check if the subdirectories exist
+        if not os.path.isdir(self.image_folder) or not os.path.isdir(self.label_folder):
+            QMessageBox.critical(
+                self,
+                "Error",
+                "The selected folder must contain 'images' and 'ground_truth' subfolders.",
+            )
+            sys.exit()
 
     def match_images_and_labels(self):
         """
@@ -374,6 +468,17 @@ class ImageLabeler(QMainWindow):
         view_3d_action.triggered.connect(self.show_3d_view)
         toolbar.addAction(view_3d_action)
 
+        # Undo/Redo actions
+        undo_action = QAction("Undo", self)
+        undo_action.setShortcut(QKeySequence.Undo)
+        undo_action.triggered.connect(self.undo)
+        toolbar.addAction(undo_action)
+
+        redo_action = QAction("Redo", self)
+        redo_action.setShortcut(QKeySequence.Redo)
+        redo_action.triggered.connect(self.redo)
+        toolbar.addAction(redo_action)
+
     def create_sliders(self):
         """
         Create the settings dock with sliders and colormap selection.
@@ -440,6 +545,28 @@ class ImageLabeler(QMainWindow):
         slider_layout.addWidget(colormap_label)
         slider_layout.addWidget(self.colormap_combo)
 
+        # Brightness Slider
+        brightness_label = QLabel("Brightness:")
+        self.brightness_slider = QSlider(Qt.Horizontal)
+        self.brightness_slider.setMinimum(-100)
+        self.brightness_slider.setMaximum(100)
+        self.brightness_slider.setValue(0)
+        self.brightness_slider.valueChanged.connect(self.update_image_filters)
+
+        slider_layout.addWidget(brightness_label)
+        slider_layout.addWidget(self.brightness_slider)
+
+        # Contrast Slider
+        contrast_label = QLabel("Contrast:")
+        self.contrast_slider = QSlider(Qt.Horizontal)
+        self.contrast_slider.setMinimum(-100)
+        self.contrast_slider.setMaximum(100)
+        self.contrast_slider.setValue(0)
+        self.contrast_slider.valueChanged.connect(self.update_image_filters)
+
+        slider_layout.addWidget(contrast_label)
+        slider_layout.addWidget(self.contrast_slider)
+
         slider_widget.setLayout(slider_layout)
         dock.setWidget(slider_widget)
 
@@ -497,6 +624,42 @@ class ImageLabeler(QMainWindow):
         self.colormap_name = self.colormap_combo.currentText()
         if not self.dot_view:
             self.update_gaussian_overlay()
+
+    def update_image_filters(self):
+        """
+        Update the image based on brightness, contrast settings.
+        """
+        self.brightness = self.brightness_slider.value()
+        self.contrast = self.contrast_slider.value()
+
+        if self.original_image:
+            image = self.original_image
+
+            # Apply brightness
+            if self.brightness != 0:
+                enhancer = ImageEnhance.Brightness(image)
+                factor = (self.brightness + 100) / 100
+                image = enhancer.enhance(factor)
+
+            # Apply contrast
+            if self.contrast != 0:
+                enhancer = ImageEnhance.Contrast(image)
+                factor = (self.contrast + 100) / 100
+                image = enhancer.enhance(factor)
+
+            # Update the displayed image
+            data = image.tobytes("raw", "RGB")
+            qimage = QImage(
+                data, image.width, image.height, QImage.Format_RGB888
+            )
+            pixmap = QPixmap.fromImage(qimage)
+
+            # Update pixmap item
+            self.pixmap_item.setPixmap(pixmap)
+
+            # Ensure Gaussian overlay is on top
+            if self.gaussian_image_item:
+                self.gaussian_image_item.setParentItem(self.pixmap_item)
 
     def toggle_view_mode(self, checked):
         """
@@ -595,28 +758,30 @@ class ImageLabeler(QMainWindow):
                 self.scene.removeItem(self.gaussian_image_item)
             self.gaussian_image_item = None
 
+        # Clear undo/redo stacks
+        self.undo_stack.clear()
+        self.redo_stack.clear()
+
         # Clear scene
         self.scene.clear()
         self.reset_zoom()
 
         # Load image
         image_path, label_path = self.matched_files[index]
-        pil_image = Image.open(image_path).convert("RGB")
-        data = pil_image.tobytes("raw", "RGB")
-        qimage = QImage(
-            data, pil_image.width, pil_image.height, QImage.Format_RGB888
-        )
-        pixmap = QPixmap.fromImage(qimage)
+        self.original_image = Image.open(image_path).convert("RGB")  # Store original image
 
         # Add image to scene
-        self.pixmap_item = self.scene.addPixmap(pixmap)
+        self.pixmap_item = self.scene.addPixmap(QPixmap())  # Placeholder
         self.pixmap_item.setZValue(-1)
+
+        # Update filters (which will update the displayed image)
+        self.update_image_filters()
 
         # Load labels
         self.load_labels(label_path)
 
         # Fit view
-        self.scene.setSceneRect(self.pixmap_item.boundingRect())
+        self.scene.setSceneRect(0, 0, self.original_image.width, self.original_image.height)
         self.view.setSceneRect(self.scene.sceneRect())
         self.view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
         self.scale_factor = 1.0
@@ -630,6 +795,7 @@ class ImageLabeler(QMainWindow):
         if not self.dot_view:
             self.update_gaussian_overlay()
 
+
     def load_labels(self, label_path):
         """
         Load labels from a CSV file.
@@ -640,9 +806,9 @@ class ImageLabeler(QMainWindow):
                 x = float(row["X"])
                 y = float(row["Y"])
                 z = float(row["Z"])
-                self.add_label(x, y, z)
+                self.add_label(x, y, z, record_action=False)
 
-    def add_label(self, x, y, z):
+    def add_label(self, x, y, z, record_action=True):
         """
         Add a label at the specified coordinates.
         """
@@ -659,6 +825,11 @@ class ImageLabeler(QMainWindow):
         if not self.dot_view:
             self.update_gaussian_overlay()
 
+        if record_action:
+            action = AddLabelAction(self, label_item)
+            self.undo_stack.append(action)
+            self.redo_stack.clear()
+
     def remove_label(self, label_item):
         """
         Remove a label from the scene and update the overlay.
@@ -669,6 +840,10 @@ class ImageLabeler(QMainWindow):
                 self.scene.removeItem(label_item)
             if not self.dot_view:
                 self.update_gaussian_overlay()
+
+            action = DeleteLabelAction(self, label_item)
+            self.undo_stack.append(action)
+            self.redo_stack.clear()
 
     def save_labels(self, label_path):
         """
@@ -683,6 +858,24 @@ class ImageLabeler(QMainWindow):
                 y = pos.y()
                 z = label_item.z
                 writer.writerow({"X": x, "Y": y, "Z": z})
+
+    def undo(self):
+        """
+        Undo the last action.
+        """
+        if self.undo_stack:
+            action = self.undo_stack.pop()
+            action.undo()
+            self.redo_stack.append(action)
+
+    def redo(self):
+        """
+        Redo the last undone action.
+        """
+        if self.redo_stack:
+            action = self.redo_stack.pop()
+            action.redo()
+            self.undo_stack.append(action)
 
     def keyPressEvent(self, event):
         """
@@ -851,9 +1044,10 @@ def main():
         import numpy
         import scipy
         import matplotlib
+        import cv2
     except ImportError:
-        print("This application requires numpy, scipy, and matplotlib.")
-        print("Please install them using 'pip install numpy scipy matplotlib'")
+        print("This application requires numpy, scipy, matplotlib, and opencv-python.")
+        print("Please install them using 'pip install numpy scipy matplotlib opencv-python'")
         sys.exit()
 
     app = QApplication(sys.argv)
