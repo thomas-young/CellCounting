@@ -44,7 +44,7 @@ This will install all the dependencies specified in the `requirements.txt` file.
 
 Run 'python CellPointLabeler.py' and select a directory containing subdirectories with images and labels as shown below:
 
-.
+```
 ├── ground_truth
 │   ├── 220812_GFP-AHPC_A_GFAP_F10_DAPI_ND1_20x.csv
 │   ├── 220812_GFP-AHPC_A_GFAP_F1_DAPI_ND1_20x.csv
@@ -61,7 +61,7 @@ Run 'python CellPointLabeler.py' and select a directory containing subdirectorie
     ├── 220912_GFP-AHPC_C_TuJ1_F4_DAPI_ND1_20x.tiff
     ├── 220912_GFP-AHPC_C_TuJ1_F8_DAPI_ND1_20x.tiff
     └── 220912_GFP-AHPC_C_TuJ1_F9_DAPI_ND1_20x.tiff
-
+```
 ### Step 4: Deactivate the Virtual Environment
 
 When you're done working, deactivate the virtual environment with:
