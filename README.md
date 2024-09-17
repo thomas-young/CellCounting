@@ -1,6 +1,6 @@
 # CellCounting Project
 
-This project is designed for counting cells using Python and requires a virtual environment to manage dependencies. Follow the instructions below to set up the project.
+This project is designed for viewing and editing cell count point annotations using Python and requires a virtual environment to manage dependencies. Follow the instructions below to set up the project.
 
 ## Prerequisites
 
