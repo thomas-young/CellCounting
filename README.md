@@ -42,7 +42,10 @@ pip install -r requirements.txt
 
 This will install all the dependencies specified in the `requirements.txt` file.
 
-Run 'python CellPointLabeler.py' and select a directory containing subdirectories with images and labels as shown below:
+### Step 4: Run the Application
+
+#### GUI
+To run the GUI, run the command 'python CellPointLabeler.py' and select a directory containing subdirectories with images and labels as shown below:
 
 ```
 ├── ground_truth
@@ -63,7 +66,7 @@ Run 'python CellPointLabeler.py' and select a directory containing subdirectorie
     └── 220912_GFP-AHPC_C_TuJ1_F9_DAPI_ND1_20x.tiff
 ```
 
-**Run the Application in Batch Mode:**
+#### Batch Mode
 
 You can also run the script in batch mode using the --batch flag to export all of the gaussian density maps at once.
 
@@ -80,7 +83,7 @@ This sets the sigma value to 15 for the Gaussian filter.
 If --input-folder Is Not Provided:
 The script will prompt you to select the parent folder via a dialog window.
 
-### Step 4: Deactivate the Virtual Environment
+### Step 5: Deactivate the Virtual Environment
 
 When you're done working, deactivate the virtual environment with:
 
