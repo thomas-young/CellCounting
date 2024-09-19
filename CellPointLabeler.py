@@ -107,7 +107,7 @@ class BaseDensityProcessor:
             for row in reader:
                 x = float(row["X"])
                 y = float(row["Y"])
-                z = float(row.get("Z", 0))  # Use 0 as default if 'Z' is missing
+                z = float(row.get("Z", 1))  # Use 0 as default if 'Z' is missing
                 labels.append((x, y, z))
         return labels
 
@@ -152,7 +152,7 @@ class BaseDensityProcessor:
         Save the density map as a TIFF image with raw values.
         """
         parent_dir = os.path.dirname(self.image_folder)
-        density_maps_dir = os.path.join(parent_dir, "density_maps")
+        density_maps_dir = os.path.join(parent_dir, f"density_maps_sigma_{self.sigma}")
         if not os.path.exists(density_maps_dir):
             os.makedirs(density_maps_dir)
 
