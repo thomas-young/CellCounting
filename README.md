@@ -1,6 +1,6 @@
 # CellCounting Project
 
-This project is designed for counting cells using Python and requires a virtual environment to manage dependencies. Follow the instructions below to set up the project.
+This project is designed for viewing and editing cell count point annotations using Python and requires a virtual environment to manage dependencies. Follow the instructions below to set up the project.
 
 ## Prerequisites
 
@@ -42,6 +42,26 @@ pip install -r requirements.txt
 
 This will install all the dependencies specified in the `requirements.txt` file.
 
+Run 'python CellPointLabeler.py' and select a directory containing subdirectories with images and labels as shown below:
+
+```
+├── ground_truth
+│   ├── 220812_GFP-AHPC_A_GFAP_F10_DAPI_ND1_20x.csv
+│   ├── 220812_GFP-AHPC_A_GFAP_F1_DAPI_ND1_20x.csv
+|   |...
+│   ├── 220912_GFP-AHPC_C_TuJ1_F1.2_DAPI_ND1_20x.csv
+│   ├── 220912_GFP-AHPC_C_TuJ1_F4_DAPI_ND1_20x.csv
+│   ├── 220912_GFP-AHPC_C_TuJ1_F8_DAPI_ND1_20x.csv
+│   └── 220912_GFP-AHPC_C_TuJ1_F9_DAPI_ND1_20x.csv
+└── images
+    ├── 220812_GFP-AHPC_A_GFAP_F10_DAPI_ND1_20x.tiff
+    ├── 220812_GFP-AHPC_A_GFAP_F1_DAPI_ND1_20x.tiff
+    |...
+    ├── 220912_GFP-AHPC_C_TuJ1_F1.2_DAPI_ND1_20x.tiff
+    ├── 220912_GFP-AHPC_C_TuJ1_F4_DAPI_ND1_20x.tiff
+    ├── 220912_GFP-AHPC_C_TuJ1_F8_DAPI_ND1_20x.tiff
+    └── 220912_GFP-AHPC_C_TuJ1_F9_DAPI_ND1_20x.tiff
+```
 ### Step 4: Deactivate the Virtual Environment
 
 When you're done working, deactivate the virtual environment with:
