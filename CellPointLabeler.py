@@ -6,8 +6,7 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+import argparse
 from abc import ABC, abstractmethod
 
 from PyQt5.QtWidgets import (
@@ -27,149 +26,185 @@ from PyQt5.QtWidgets import (
     QDockWidget,
     QDialog,
     QComboBox,
-    QCheckBox,
-    QMessageBox,  # Added for error messages
+    QMessageBox,
 )
 from PyQt5.QtGui import QPixmap, QImage, QPen, QColor, QKeySequence
 from PyQt5.QtCore import Qt, QEvent, QRectF, QThread, pyqtSignal, QMutex, QMutexLocker
 
-from PIL import Image, ImageEnhance  # Removed ImageFilter as we use OpenCV now
+from PIL import Image, ImageEnhance
 
 
-class Action(ABC):
-    @abstractmethod
-    def undo(self):
-        pass
-
-    @abstractmethod
-    def redo(self):
-        pass
-
-
-class AddLabelAction(Action):
-    def __init__(self, image_labeler, label_item):
-        self.image_labeler = image_labeler
-        self.label_item = label_item
-
-    def undo(self):
-        self.image_labeler.labels.remove(self.label_item)
-        if self.label_item.scene():
-            self.image_labeler.scene.removeItem(self.label_item)
-        if not self.image_labeler.dot_view:
-            self.image_labeler.update_gaussian_overlay()
-
-    def redo(self):
-        self.image_labeler.labels.append(self.label_item)
-        self.label_item.setParentItem(self.image_labeler.pixmap_item)
-        if not self.image_labeler.dot_view:
-            self.image_labeler.update_gaussian_overlay()
-
-
-class DeleteLabelAction(Action):
-    def __init__(self, image_labeler, label_item):
-        self.image_labeler = image_labeler
-        self.label_item = label_item
-
-    def undo(self):
-        self.image_labeler.labels.append(self.label_item)
-        self.label_item.setParentItem(self.image_labeler.pixmap_item)
-        if not self.image_labeler.dot_view:
-            self.image_labeler.update_gaussian_overlay()
-
-    def redo(self):
-        self.image_labeler.labels.remove(self.label_item)
-        if self.label_item.scene():
-            self.image_labeler.scene.removeItem(self.label_item)
-        if not self.image_labeler.dot_view:
-            self.image_labeler.update_gaussian_overlay()
-
-
-class MoveLabelAction(Action):
-    def __init__(self, image_labeler, label_item, old_pos, new_pos):
-        self.image_labeler = image_labeler
-        self.label_item = label_item
-        self.old_pos = old_pos
-        self.new_pos = new_pos
-
-    def undo(self):
-        self.label_item.setPos(self.old_pos)
-        if not self.image_labeler.dot_view:
-            self.image_labeler.update_gaussian_overlay()
-
-    def redo(self):
-        self.label_item.setPos(self.new_pos)
-        if not self.image_labeler.dot_view:
-            self.image_labeler.update_gaussian_overlay()
-
-
-class LabelItem(QGraphicsEllipseItem):
+class BaseDensityProcessor:
     """
-    Custom QGraphicsEllipseItem representing a label on the image.
-    Allows for interactive movement and deletion.
+    Base class for shared functionality between ImageLabeler and GaussianDensityGenerator.
     """
 
-    def __init__(self, x, y, z, parent=None, radius=3, opacity=0.5):
-        super().__init__(-radius, -radius, radius * 2, radius * 2)
-        self.setPos(x, y)
-        self.setPen(QPen(Qt.red))
-        self.setBrush(QColor(Qt.red))
-        self.setOpacity(opacity)
-        self.radius = radius
-        self.setFlags(
-            QGraphicsEllipseItem.ItemIsMovable
-            | QGraphicsEllipseItem.ItemIsSelectable
-            | QGraphicsEllipseItem.ItemSendsGeometryChanges
+    def __init__(self):
+        self.image_folder = ""
+        self.label_folder = ""
+        self.matched_files = []
+        self.sigma = 10  # Default sigma value
+
+    def select_folders(self, parent_folder=None):
+        """
+        Prompt the user to select the parent folder containing 'images' and 'ground_truth' subdirectories.
+        """
+        if not parent_folder:
+            parent_folder = QFileDialog.getExistingDirectory(
+                None,
+                "Select Parent Folder (containing 'images' and 'ground_truth' subfolders)",
+            )
+            if not parent_folder:
+                sys.exit()
+
+        self.image_folder = os.path.join(parent_folder, "images")
+        self.label_folder = os.path.join(parent_folder, "ground_truth")
+
+        # Check if the subdirectories exist
+        if not os.path.isdir(self.image_folder) or not os.path.isdir(self.label_folder):
+            QMessageBox.critical(
+                None,
+                "Error",
+                "The selected folder must contain 'images' and 'ground_truth' subfolders.",
+            )
+            sys.exit()
+
+    def match_images_and_labels(self):
+        """
+        Match image files with corresponding label files.
+        """
+        image_files = sorted(glob.glob(os.path.join(self.image_folder, "*.tiff")))
+        image_dict = {}
+        for img_path in image_files:
+            base_name = os.path.splitext(os.path.basename(img_path))[0]
+            image_dict[base_name] = img_path
+
+        label_dict = {}
+        label_files = glob.glob(os.path.join(self.label_folder, "*.csv"))
+        for label_path in label_files:
+            base_name = os.path.splitext(os.path.basename(label_path))[0]
+            label_dict[base_name] = label_path
+
+        self.matched_files = []
+        for base_name in image_dict.keys():
+            image_path = image_dict[base_name]
+            if base_name in label_dict:
+                label_path = label_dict[base_name]
+            else:
+                label_path = os.path.join(self.label_folder, base_name + ".csv")
+                with open(label_path, "w", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["X", "Y", "Z"])
+            self.matched_files.append((base_name, image_path, label_path))
+
+    def load_labels(self, label_path):
+        """
+        Load labels from a CSV file.
+        """
+        labels = []
+        with open(label_path, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                x = float(row["X"])
+                y = float(row["Y"])
+                z = float(row.get("Z", 0))  # Use 0 as default if 'Z' is missing
+                labels.append((x, y, z))
+        return labels
+
+    def generate_density_map(self, labels, image_size):
+        """
+        Generate the Gaussian density map.
+        """
+        width, height = image_size
+        scale = 0.25  # Downsample factor
+        scaled_width = int(width * scale)
+        scaled_height = int(height * scale)
+
+        density_map = np.zeros((scaled_height, scaled_width), dtype=np.float32)
+
+        for x, y, _ in labels:
+            x *= scale
+            y *= scale
+            ix = int(round(x))
+            iy = int(round(y))
+            if 0 <= ix < scaled_width and 0 <= iy < scaled_height:
+                density_map[iy, ix] += 1
+
+        if np.count_nonzero(density_map) == 0:
+            return None
+
+        scaled_sigma = self.sigma * scale
+        density_map = gaussian_filter(density_map, sigma=scaled_sigma)
+
+        density_map -= density_map.min()
+        if density_map.max() != 0:
+            density_map /= density_map.max()
+
+        # Resize density_map back to original size
+        density_map_resized = np.array(
+            Image.fromarray(density_map).resize((width, height), Image.BILINEAR)
         )
-        self.setAcceptHoverEvents(True)
-        self.z = z  # Class label (if needed)
-        self.parent = parent
 
-    def update_appearance(self, radius, opacity):
+        return density_map_resized
+
+    def save_density_map(self, density_map, base_name):
         """
-        Update the size and opacity of the label.
+        Save the density map as a TIFF image with raw values.
         """
-        self.radius = radius
-        self.setRect(-radius, -radius, radius * 2, radius * 2)
-        self.setOpacity(opacity)
+        parent_dir = os.path.dirname(self.image_folder)
+        density_maps_dir = os.path.join(parent_dir, "density_maps")
+        if not os.path.exists(density_maps_dir):
+            os.makedirs(density_maps_dir)
 
-    def hoverEnterEvent(self, event):
-        QApplication.setOverrideCursor(Qt.OpenHandCursor)
-        super().hoverEnterEvent(event)
+        output_path = os.path.join(density_maps_dir, f"{base_name}.tiff")
+        density_image = Image.fromarray(density_map, mode='F')
+        density_image.save(output_path, format='TIFF')
+        return output_path
 
-    def hoverLeaveEvent(self, event):
-        QApplication.restoreOverrideCursor()
-        super().hoverLeaveEvent(event)
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            QApplication.setOverrideCursor(Qt.ClosedHandCursor)
-            self.start_pos = self.pos()  # Record starting position
-        elif event.button() == Qt.RightButton:
-            # Right-click to delete the label
-            if self.parent:
-                self.parent.remove_label(self)
-            return
-        super().mousePressEvent(event)
+class GaussianDensityGenerator(BaseDensityProcessor):
+    """
+    Class to handle batch processing of images to generate Gaussian density maps.
+    """
 
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            QApplication.restoreOverrideCursor()
-            end_pos = self.pos()
-            if self.start_pos != end_pos:
-                # Record move action
-                action = MoveLabelAction(self.parent, self, self.start_pos, end_pos)
-                self.parent.undo_stack.append(action)
-                self.parent.redo_stack.clear()
-        super().mouseReleaseEvent(event)
+    def __init__(self, parent_folder, sigma):
+        super().__init__()
+        self.sigma = sigma
+        self.select_folders(parent_folder)
+        self.match_images_and_labels()
+
+    def process_all_images(self):
+        """
+        Process all images to generate and save density maps.
+        """
+        for base_name, image_path, label_path in self.matched_files:
+            print(f"Processing {base_name}...")
+
+            # Load image to get size
+            image = Image.open(image_path)
+            width, height = image.size
+
+            # Load labels
+            labels = self.load_labels(label_path)
+
+            # Generate density map
+            density_map = self.generate_density_map(labels, (width, height))
+            if density_map is None:
+                print(f"No labels found for {base_name}. Skipping.")
+                continue
+
+            # Save density map
+            output_path = self.save_density_map(density_map, base_name)
+            print(f"Density map saved to {output_path}")
 
 
 class GaussianWorker(QThread):
     """
     Worker thread to generate the Gaussian density map without blocking the UI.
-    Emits the result_ready signal with the generated pixmap when done.
+    Emits the result_ready signal with the generated pixmap and density map when done.
     """
 
-    result_ready = pyqtSignal(int, QPixmap)
+    result_ready = pyqtSignal(int, QPixmap, np.ndarray)
 
     def __init__(self, labels, image_size, sigma, colormap_name, worker_id):
         super().__init__()
@@ -214,16 +249,15 @@ class GaussianWorker(QThread):
         if density_map.max() != 0:
             density_map /= density_map.max()
 
-        # Apply colormap
-        colormap = cm.get_cmap(self.colormap_name)
-        colored_density_map = colormap(density_map)
-        colored_density_map = (colored_density_map[:, :, :3] * 255).astype(np.uint8)
-
-        colored_density_map = np.array(
-            Image.fromarray(colored_density_map).resize(
-                (width, height), Image.BILINEAR
-            )
+        # Resize density_map back to original size
+        density_map_resized = np.array(
+            Image.fromarray(density_map).resize((width, height), Image.BILINEAR)
         )
+
+        # Apply colormap for display purposes
+        colormap = cm.get_cmap(self.colormap_name)
+        colored_density_map = colormap(density_map_resized)
+        colored_density_map = (colored_density_map[:, :, :3] * 255).astype(np.uint8)
 
         height, width, channel = colored_density_map.shape
         bytes_per_line = 3 * width
@@ -241,7 +275,7 @@ class GaussianWorker(QThread):
             if self.stop_requested:
                 return
 
-        self.result_ready.emit(self.worker_id, pixmap)
+        self.result_ready.emit(self.worker_id, pixmap, density_map_resized)
 
     def stop(self):
         """
@@ -285,24 +319,23 @@ class Gaussian3DViewer(QDialog):
         self.setLayout(layout)
 
 
-class ImageLabeler(QMainWindow):
+class ImageLabeler(BaseDensityProcessor, QMainWindow):
     """
     Main application class for labeling images and visualizing Gaussian density maps.
     """
 
     def __init__(self):
-        super().__init__()
+        BaseDensityProcessor.__init__(self)  # Initialize the base class
+        QMainWindow.__init__(self)
 
-        # Initialize variables
-        self.image_folder = ""
-        self.label_folder = ""
+        # Initialize variables specific to ImageLabeler
         self.current_index = 0
         self.labels = []
         self.scale_factor = 1.0
         self.zoom_mode = False
         self.label_opacity = 0.5
         self.label_size = 3
-        self.gaussian_sigma = 10
+        self.gaussian_sigma = self.sigma  # Use sigma from base class
         self.gaussian_opacity = 0.5
         self.dot_view = True
         self.gaussian_image_item = None
@@ -318,6 +351,9 @@ class ImageLabeler(QMainWindow):
         self.brightness = 0
         self.contrast = 0
         self.original_image = None  # PIL Image
+
+        # Store the current density map
+        self.current_density_map = None
 
         # List of available colormaps
         self.available_colormaps = [
@@ -343,83 +379,31 @@ class ImageLabeler(QMainWindow):
         self.load_image_and_labels(self.current_index)
         self.show()
 
-    def select_folders(self):
-        """
-        Prompt the user to select the parent folder containing 'images' and 'ground_truth' subdirectories.
-        """
-        parent_folder = QFileDialog.getExistingDirectory(
-            self, "Select Parent Folder (containing 'images' and 'ground_truth' subfolders)"
-        )
-        if not parent_folder:
-            sys.exit()
-
-        self.image_folder = os.path.join(parent_folder, "images")
-        self.label_folder = os.path.join(parent_folder, "ground_truth")
-
-        # Check if the subdirectories exist
-        if not os.path.isdir(self.image_folder) or not os.path.isdir(self.label_folder):
-            QMessageBox.critical(
-                self,
-                "Error",
-                "The selected folder must contain 'images' and 'ground_truth' subfolders.",
-            )
-            sys.exit()
-
-    def match_images_and_labels(self):
-        """
-        Match image files with corresponding label files.
-        """
-        self.image_files = sorted(
-            glob.glob(os.path.join(self.image_folder, "*.tiff"))
-        )
-        self.image_dict = {}
-        for img_path in self.image_files:
-            base_name = os.path.splitext(os.path.basename(img_path))[0]
-            self.image_dict[base_name] = img_path
-
-        self.label_dict = {}
-        label_files = glob.glob(os.path.join(self.label_folder, "*.csv"))
-        for label_path in label_files:
-            base_name = os.path.splitext(os.path.basename(label_path))[0]
-            self.label_dict[base_name] = label_path
-
-        self.matched_files = []
-        for base_name in self.image_dict.keys():
-            image_path = self.image_dict[base_name]
-            if base_name in self.label_dict:
-                label_path = self.label_dict[base_name]
-            else:
-                label_path = os.path.join(self.label_folder, base_name + ".csv")
-                with open(label_path, "w", newline="") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(["X", "Y", "Z"])
-            self.matched_files.append((image_path, label_path))
-
     def initUI(self):
-        """
-        Initialize the user interface components.
-        """
-        self.setWindowTitle("Image Labeler")
+            """
+            Initialize the user interface components.
+            """
+            self.setWindowTitle("Image Labeler")
 
-        # Central widget and layout
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        layout = QVBoxLayout(central_widget)
+            # Central widget and layout
+            central_widget = QWidget()
+            self.setCentralWidget(central_widget)
+            layout = QVBoxLayout(central_widget)
 
-        # Graphics scene and view
-        self.scene = QGraphicsScene()
-        self.view = QGraphicsView(self.scene)
-        layout.addWidget(self.view)
+            # Graphics scene and view
+            self.scene = QGraphicsScene()
+            self.view = QGraphicsView(self.scene)
+            layout.addWidget(self.view)
 
-        # Event filters and policies
-        self.view.setMouseTracking(True)
-        self.view.viewport().installEventFilter(self)
-        self.setFocusPolicy(Qt.StrongFocus)
-        self.view.setFocusPolicy(Qt.NoFocus)
+            # Event filters and policies
+            self.view.setMouseTracking(True)
+            self.view.viewport().installEventFilter(self)
+            self.setFocusPolicy(Qt.StrongFocus)
+            self.view.setFocusPolicy(Qt.NoFocus)
 
-        # Toolbars and actions
-        self.create_toolbar()
-        self.create_sliders()
+            # Toolbars and actions
+            self.create_toolbar()
+            self.create_sliders()
 
     def create_toolbar(self):
         """
@@ -478,6 +462,11 @@ class ImageLabeler(QMainWindow):
         redo_action.setShortcut(QKeySequence.Redo)
         redo_action.triggered.connect(self.redo)
         toolbar.addAction(redo_action)
+
+        # Add Export Density Map action
+        export_action = QAction("Export Density Map", self)
+        export_action.triggered.connect(self.export_density_map)
+        toolbar.addAction(export_action)
 
     def create_sliders(self):
         """
@@ -627,7 +616,7 @@ class ImageLabeler(QMainWindow):
 
     def update_image_filters(self):
         """
-        Update the image based on brightness, contrast settings.
+        Update the image based on brightness and contrast settings.
         """
         self.brightness = self.brightness_slider.value()
         self.contrast = self.contrast_slider.value()
@@ -707,7 +696,7 @@ class ImageLabeler(QMainWindow):
         self.gaussian_worker.result_ready.connect(self.on_gaussian_result)
         self.gaussian_worker.start()
 
-    def on_gaussian_result(self, worker_id, pixmap):
+    def on_gaussian_result(self, worker_id, pixmap, density_map):
         """
         Handle the result from the GaussianWorker.
         """
@@ -732,6 +721,9 @@ class ImageLabeler(QMainWindow):
         self.gaussian_image_item.setOpacity(self.gaussian_opacity)
         self.gaussian_image_item.setZValue(0)
 
+        # Store the density map
+        self.current_density_map = density_map
+
     def load_image_and_labels(self, index):
         """
         Load the image and corresponding labels at the specified index.
@@ -743,7 +735,7 @@ class ImageLabeler(QMainWindow):
 
         # Save current labels
         if hasattr(self, "pixmap_item"):
-            _, label_path = self.matched_files[self.current_index]
+            _, _, label_path = self.matched_files[self.current_index]
             self.save_labels(label_path)
 
         # Remove labels
@@ -762,12 +754,15 @@ class ImageLabeler(QMainWindow):
         self.undo_stack.clear()
         self.redo_stack.clear()
 
+        # Clear current density map
+        self.current_density_map = None
+
         # Clear scene
         self.scene.clear()
         self.reset_zoom()
 
         # Load image
-        image_path, label_path = self.matched_files[index]
+        _, image_path, label_path = self.matched_files[index]
         self.original_image = Image.open(image_path).convert("RGB")  # Store original image
 
         # Add image to scene
@@ -778,7 +773,9 @@ class ImageLabeler(QMainWindow):
         self.update_image_filters()
 
         # Load labels
-        self.load_labels(label_path)
+        labels = self.load_labels(label_path)
+        for x, y, z in labels:
+            self.add_label(x, y, z, record_action=False)
 
         # Fit view
         self.scene.setSceneRect(0, 0, self.original_image.width, self.original_image.height)
@@ -794,19 +791,6 @@ class ImageLabeler(QMainWindow):
         # Update view mode
         if not self.dot_view:
             self.update_gaussian_overlay()
-
-
-    def load_labels(self, label_path):
-        """
-        Load labels from a CSV file.
-        """
-        with open(label_path, "r") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                x = float(row["X"])
-                y = float(row["Y"])
-                z = float(row["Z"])
-                self.add_label(x, y, z, record_action=False)
 
     def add_label(self, x, y, z, record_action=True):
         """
@@ -927,7 +911,7 @@ class ImageLabeler(QMainWindow):
             self.gaussian_worker.wait()
 
         if hasattr(self, "pixmap_item"):
-            _, label_path = self.matched_files[self.current_index]
+            _, _, label_path = self.matched_files[self.current_index]
             self.save_labels(label_path)
         event.accept()
 
@@ -1016,23 +1000,163 @@ class ImageLabeler(QMainWindow):
         """
         Display the Gaussian density map in an interactive 3D plot.
         """
-        width = int(self.pixmap_item.pixmap().width())
-        height = int(self.pixmap_item.pixmap().height())
-        density_map = np.zeros((height, width), dtype=np.float32)
-
-        for label in self.labels:
-            x = int(round(label.pos().x()))
-            y = int(round(label.pos().y()))
-            if 0 <= x < width and 0 <= y < height:
-                density_map[y, x] += 1
-
-        if np.count_nonzero(density_map) == 0:
+        if self.current_density_map is None:
+            QMessageBox.warning(self, "3D View", "No density map available to display.")
             return
 
-        density_map = gaussian_filter(density_map, sigma=self.gaussian_sigma)
+        density_map = self.current_density_map
+
+        if np.count_nonzero(density_map) == 0:
+            QMessageBox.warning(self, "3D View", "Density map is empty.")
+            return
 
         viewer = Gaussian3DViewer(density_map, self)
         viewer.exec_()
+
+    def export_density_map(self):
+        """
+        Export the current Gaussian density map as a TIFF file with raw values.
+        """
+        if self.current_density_map is None:
+            QMessageBox.warning(self, "Export Failed", "No density map available to export.")
+            return
+
+        # Get the current image base name
+        _, image_path, _ = self.matched_files[self.current_index]
+        base_name = os.path.splitext(os.path.basename(image_path))[0]
+
+        # Save the density map
+        output_path = self.save_density_map(self.current_density_map, base_name)
+
+        QMessageBox.information(self, "Export Successful", f"Density map saved to {output_path}.")
+
+
+# Additional classes and methods required by ImageLabeler
+class Action(ABC):
+    @abstractmethod
+    def undo(self):
+        pass
+
+    @abstractmethod
+    def redo(self):
+        pass
+
+
+class AddLabelAction(Action):
+    def __init__(self, image_labeler, label_item):
+        self.image_labeler = image_labeler
+        self.label_item = label_item
+
+    def undo(self):
+        self.image_labeler.labels.remove(self.label_item)
+        if self.label_item.scene():
+            self.image_labeler.scene.removeItem(self.label_item)
+        if not self.image_labeler.dot_view:
+            self.image_labeler.update_gaussian_overlay()
+
+    def redo(self):
+        self.image_labeler.labels.append(self.label_item)
+        self.label_item.setParentItem(self.image_labeler.pixmap_item)
+        if not self.image_labeler.dot_view:
+            self.image_labeler.update_gaussian_overlay()
+
+
+class DeleteLabelAction(Action):
+    def __init__(self, image_labeler, label_item):
+        self.image_labeler = image_labeler
+        self.label_item = label_item
+
+    def undo(self):
+        self.image_labeler.labels.append(self.label_item)
+        self.label_item.setParentItem(self.image_labeler.pixmap_item)
+        if not self.image_labeler.dot_view:
+            self.image_labeler.update_gaussian_overlay()
+
+    def redo(self):
+        self.image_labeler.labels.remove(self.label_item)
+        if self.label_item.scene():
+            self.image_labeler.scene.removeItem(self.label_item)
+        if not self.image_labeler.dot_view:
+            self.image_labeler.update_gaussian_overlay()
+
+
+class MoveLabelAction(Action):
+    def __init__(self, image_labeler, label_item, old_pos, new_pos):
+        self.image_labeler = image_labeler
+        self.label_item = label_item
+        self.old_pos = old_pos
+        self.new_pos = new_pos
+
+    def undo(self):
+        self.label_item.setPos(self.old_pos)
+        if not self.image_labeler.dot_view:
+            self.image_labeler.update_gaussian_overlay()
+
+    def redo(self):
+        self.label_item.setPos(self.new_pos)
+        if not self.image_labeler.dot_view:
+            self.image_labeler.update_gaussian_overlay()
+
+
+class LabelItem(QGraphicsEllipseItem):
+    """
+    Custom QGraphicsEllipseItem representing a label on the image.
+    Allows for interactive movement and deletion.
+    """
+
+    def __init__(self, x, y, z, parent=None, radius=3, opacity=0.5):
+        super().__init__(-radius, -radius, radius * 2, radius * 2)
+        self.setPos(x, y)
+        self.setPen(QPen(Qt.red))
+        self.setBrush(QColor(Qt.red))
+        self.setOpacity(opacity)
+        self.radius = radius
+        self.setFlags(
+            QGraphicsEllipseItem.ItemIsMovable
+            | QGraphicsEllipseItem.ItemIsSelectable
+            | QGraphicsEllipseItem.ItemSendsGeometryChanges
+        )
+        self.setAcceptHoverEvents(True)
+        self.z = z  # Class label (if needed)
+        self.parent = parent
+
+    def update_appearance(self, radius, opacity):
+        """
+        Update the size and opacity of the label.
+        """
+        self.radius = radius
+        self.setRect(-radius, -radius, radius * 2, radius * 2)
+        self.setOpacity(opacity)
+
+    def hoverEnterEvent(self, event):
+        QApplication.setOverrideCursor(Qt.OpenHandCursor)
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        QApplication.restoreOverrideCursor()
+        super().hoverLeaveEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            QApplication.setOverrideCursor(Qt.ClosedHandCursor)
+            self.start_pos = self.pos()  # Record starting position
+        elif event.button() == Qt.RightButton:
+            # Right-click to delete the label
+            if self.parent:
+                self.parent.remove_label(self)
+            return
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            QApplication.restoreOverrideCursor()
+            end_pos = self.pos()
+            if self.start_pos != end_pos:
+                # Record move action
+                action = MoveLabelAction(self.parent, self, self.start_pos, end_pos)
+                self.parent.undo_stack.append(action)
+                self.parent.redo_stack.clear()
+        super().mouseReleaseEvent(event)
 
 
 def main():
@@ -1044,15 +1168,53 @@ def main():
         import numpy
         import scipy
         import matplotlib
-        import cv2
     except ImportError:
-        print("This application requires numpy, scipy, matplotlib, and opencv-python.")
-        print("Please install them using 'pip install numpy scipy matplotlib opencv-python'")
+        print("This application requires numpy, scipy, and matplotlib.")
+        print("Please install them using 'pip install numpy scipy matplotlib'")
         sys.exit()
 
-    app = QApplication(sys.argv)
-    window = ImageLabeler()
-    sys.exit(app.exec_())
+    parser = argparse.ArgumentParser(description="Image Labeler Application")
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+        help="Run in batch mode to generate density maps without GUI",
+    )
+    parser.add_argument(
+        "--sigma",
+        type=float,
+        default=10,
+        help="Sigma value for Gaussian filter (default: 10)",
+    )
+    parser.add_argument(
+        "--input-folder",
+        type=str,
+        help="Parent folder containing 'images' and 'ground_truth' subfolders",
+    )
+
+    args = parser.parse_args()
+
+    if args.batch:
+        # Batch processing mode
+        if args.input_folder:
+            parent_folder = args.input_folder
+        else:
+            # Prompt user to select folder
+            app = QApplication(sys.argv)
+            parent_folder = QFileDialog.getExistingDirectory(
+                None,
+                "Select Parent Folder (containing 'images' and 'ground_truth' subfolders)",
+            )
+            if not parent_folder:
+                print("No folder selected. Exiting.")
+                sys.exit()
+
+        generator = GaussianDensityGenerator(parent_folder, sigma=args.sigma)
+        generator.process_all_images()
+    else:
+        # GUI mode
+        app = QApplication(sys.argv)
+        window = ImageLabeler()
+        sys.exit(app.exec_())
 
 
 if __name__ == "__main__":
