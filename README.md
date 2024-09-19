@@ -75,12 +75,15 @@ Using Default Sigma Value:
 python image_labeler.py --batch --input-folder /path/to/parent_folder
 ```
 Replace `/path/to/parent_folder` with the actual path to your parent folder.
+
 Specifying Sigma Value:
 ```
 python image_labeler.py --batch --sigma 15 --input-folder /path/to/parent_folder
 ```
 This sets the sigma value to 15 for the Gaussian filter.
+
 If --input-folder Is Not Provided:
+
 The script will prompt you to select the parent folder via a dialog window.
 
 ### Step 5: Deactivate the Virtual Environment
