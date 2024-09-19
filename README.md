@@ -63,7 +63,8 @@ Run 'python CellPointLabeler.py' and select a directory containing subdirectorie
     └── 220912_GFP-AHPC_C_TuJ1_F9_DAPI_ND1_20x.tiff
 ```
 
-Run the Application in Batch Mode:
+**Run the Application in Batch Mode:**
+
 You can also run the script in batch mode using the --batch flag to export all of the gaussian density maps at once.
 
 Using Default Sigma Value:
