@@ -62,6 +62,23 @@ Run 'python CellPointLabeler.py' and select a directory containing subdirectorie
     ├── 220912_GFP-AHPC_C_TuJ1_F8_DAPI_ND1_20x.tiff
     └── 220912_GFP-AHPC_C_TuJ1_F9_DAPI_ND1_20x.tiff
 ```
+
+Run the Application in Batch Mode:
+You can also run the script in batch mode using the --batch flag to export all of the gaussian density maps at once.
+
+Using Default Sigma Value:
+```
+python image_labeler.py --batch --input-folder /path/to/parent_folder
+```
+Replace `/path/to/parent_folder` with the actual path to your parent folder.
+Specifying Sigma Value:
+```
+python image_labeler.py --batch --sigma 15 --input-folder /path/to/parent_folder
+```
+This sets the sigma value to 15 for the Gaussian filter.
+If --input-folder Is Not Provided:
+The script will prompt you to select the parent folder via a dialog window.
+
 ### Step 4: Deactivate the Virtual Environment
 
 When you're done working, deactivate the virtual environment with:
