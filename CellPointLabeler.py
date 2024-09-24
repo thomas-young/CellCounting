@@ -8,6 +8,9 @@ import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import argparse
 from abc import ABC, abstractmethod
+import albumentations as A
+from PIL import Image
+
 
 from PyQt5.QtWidgets import (
     QApplication,
@@ -378,6 +381,25 @@ class ImageLabeler(BaseDensityProcessor, QMainWindow):
         self.initUI()
         self.load_image_and_labels(self.current_index)
         self.show()
+    
+    def apply_augmentation(self, image):
+  
+        transform = A.Compose([
+            A.HorizontalFlip(),
+            A.RandomBrightnessContrast(),
+            A.Rotate(limit=30),
+            A.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
+            A.RandomResizedCrop((256, 256))
+        ])
+        
+        # Convert PIL image to numpy array for albumentations
+        image_np = np.array(image)
+
+        # Apply augmentation
+        augmented = transform(image=image_np)
+        augmented_image = Image.fromarray(augmented['image'])  # Convert back to PIL
+
+        return augmented_image
 
     def initUI(self):
             """
@@ -725,9 +747,6 @@ class ImageLabeler(BaseDensityProcessor, QMainWindow):
         self.current_density_map = density_map
 
     def load_image_and_labels(self, index):
-        """
-        Load the image and corresponding labels at the specified index.
-        """
         # Stop existing worker
         if self.gaussian_worker and self.gaussian_worker.isRunning():
             self.gaussian_worker.stop()
@@ -765,7 +784,13 @@ class ImageLabeler(BaseDensityProcessor, QMainWindow):
         _, image_path, label_path = self.matched_files[index]
         self.original_image = Image.open(image_path).convert("RGB")  # Store original image
 
-        # Add image to scene
+        # Apply augmentation
+        augmented_image = self.apply_augmentation(self.original_image)
+        
+        # Save the augmented image in a new folder
+        augmented_image.save(f'./augmented_images/{os.path.basename(image_path)}')
+
+        # Add augmented image to scene
         self.pixmap_item = self.scene.addPixmap(QPixmap())  # Placeholder
         self.pixmap_item.setZValue(-1)
 
@@ -791,7 +816,6 @@ class ImageLabeler(BaseDensityProcessor, QMainWindow):
         # Update view mode
         if not self.dot_view:
             self.update_gaussian_overlay()
-
     def add_label(self, x, y, z, record_action=True):
         """
         Add a label at the specified coordinates.
