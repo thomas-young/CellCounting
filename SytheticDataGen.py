@@ -1,17 +1,17 @@
 import os
 import numpy as np
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw, ImageFont
 import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter import filedialog
 from tqdm import tqdm
 import logging
-import cv2
+import cv2  # Ensure OpenCV is imported
 import random
-from scipy.ndimage import gaussian_filter, rotate, affine_transform
 import traceback
 import pandas as pd
 from sklearn.cluster import DBSCAN
+import argparse
 
 # Configure logging
 logging.basicConfig(
@@ -32,20 +32,19 @@ def select_directory():
     root.destroy()     # Properly destroy the Tkinter window
     return folder_selected
 
-def extract_patches_using_ground_truth(images_path, ground_truth_path, patches_path, patch_size=(64, 64), eps=20, min_samples=1):
+def extract_patches_using_clusters(images_path, ground_truth_path, patches_path, eps=20, min_samples=1):
     """
-    Extract patches from real images centered around clusters of annotated cells using ground truth CSV files.
+    Extract cell masks from real images based on clustered cell positions.
 
     Parameters:
     - images_path: Path to the directory containing real images.
     - ground_truth_path: Path to the directory containing ground truth CSV files.
     - patches_path: Path to the directory to save the patches with labels.
-    - patch_size: Tuple indicating the size of the patches (height, width).
     - eps: The maximum distance between two samples for clustering.
     - min_samples: The number of samples in a neighborhood for a point to be considered as a core point.
 
     Returns:
-    - patches: List of tuples containing image patches, density map patches, cell counts, and relative cell positions.
+    - patches: List of tuples containing image patches, density map patches, cell counts, and patch identifiers.
     """
     patches = []
     patch_cell_counts = []
@@ -67,13 +66,15 @@ def extract_patches_using_ground_truth(images_path, ground_truth_path, patches_p
 
         try:
             image = np.array(Image.open(image_path))
+            # Convert image to RGB if grayscale
+            if len(image.shape) == 2:
+                image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
             # Read ground truth CSV file using pandas
             try:
-                df = pd.read_csv(ground_truth_file, header=0)  # Set header=0 to recognize the first row as header
+                df = pd.read_csv(ground_truth_file, header=0)
                 if df.empty:
                     logging.info(f"No cell positions found in {ground_truth_file}. Skipping image.")
                     continue
-                # Extract X and Y coordinates
                 if 'X' in df.columns and 'Y' in df.columns:
                     cell_positions = df[['X', 'Y']].values
                 else:
@@ -94,58 +95,111 @@ def extract_patches_using_ground_truth(images_path, ground_truth_path, patches_p
         clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(cell_positions)
         labels = clustering.labels_
 
-        # Get unique clusters (excluding noise points if desired)
+        # Get unique clusters (excluding noise points)
         unique_labels = set(labels)
         for cluster_label in unique_labels:
+            if cluster_label == -1:
+                continue  # Skip noise
             # Get cell positions in this cluster
             cluster_positions = cell_positions[labels == cluster_label]
-            # Compute bounding box
-            x_min = int(cluster_positions[:, 0].min())
-            x_max = int(cluster_positions[:, 0].max())
-            y_min = int(cluster_positions[:, 1].min())
-            y_max = int(cluster_positions[:, 1].max())
-            # Add padding to bounding box
-            padding = 16  # Adjust padding as needed
-            x_min = max(x_min - padding, 0)
-            x_max = min(x_max + padding, img_width)
-            y_min = max(y_min - padding, 0)
-            y_max = min(y_max + padding, img_height)
 
-            # Ensure the patch size is not too small or too large
-            if (y_max - y_min) < patch_size[0] or (x_max - x_min) < patch_size[1]:
-                # Adjust to minimum patch size
-                y_center = (y_min + y_max) // 2
-                x_center = (x_min + x_max) // 2
-                y_min = max(y_center - patch_size[0] // 2, 0)
-                y_max = min(y_center + patch_size[0] // 2, img_height)
-                x_min = max(x_center - patch_size[1] // 2, 0)
-                x_max = min(x_center + patch_size[1] // 2, img_width)
+            # Create a blank mask
+            mask = np.zeros((img_height, img_width), dtype=np.uint8)
 
-            img_patch = image[y_min:y_max, x_min:x_max]
-
-            # Create density map patch
-            density_patch = np.zeros((y_max - y_min, x_max - x_min), dtype=np.float32)
-            # Place Gaussian blobs at cell positions
+            # Draw circles at cell positions
             for pos in cluster_positions:
-                x_rel = int(pos[0]) - x_min
-                y_rel = int(pos[1]) - y_min
+                cv2.circle(mask, (int(pos[0]), int(pos[1])), radius=3, color=255, thickness=-1)
+
+            # Apply dilation to fill holes (adjust iterations if needed)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13))
+            mask = cv2.dilate(mask, kernel, iterations=2)  # Updated to 2 iterations
+
+            # Find contours
+            contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+            if not contours:
+                continue  # No contours found
+
+            # Prune contours based on area
+            areas = [cv2.contourArea(c) for c in contours]
+            max_area = max(areas)
+            min_area = 0.2 * max_area
+            pruned_contours = [c for c, area in zip(contours, areas) if area >= min_area]
+
+            if not pruned_contours:
+                continue  # No contours after pruning
+
+            # Create mask from pruned contours
+            cluster_mask = np.zeros_like(mask)
+            cv2.drawContours(cluster_mask, pruned_contours, -1, color=255, thickness=-1)
+
+            # Smooth the mask (optional)
+            cluster_mask = cv2.GaussianBlur(cluster_mask, (11, 11), sigmaX=4)
+
+            # Threshold to obtain binary mask
+            _, cluster_mask = cv2.threshold(cluster_mask, 128, 255, cv2.THRESH_BINARY)
+
+            # Find bounding box of the mask
+            y_indices, x_indices = np.where(cluster_mask > 0)
+            if y_indices.size == 0 or x_indices.size == 0:
+                continue  # Empty mask
+
+            x_min, x_max = x_indices.min(), x_indices.max()
+            y_min, y_max = y_indices.min(), y_indices.max()
+
+            # Add padding if desired
+            padding = 5
+            x_min = max(x_min - padding, 0)
+            x_max = min(x_max + padding, img_width - 1)
+            y_min = max(y_min - padding, 0)
+            y_max = min(y_max + padding, img_height - 1)
+
+            # Crop the mask and image to the bounding box
+            cropped_mask = cluster_mask[y_min:y_max+1, x_min:x_max+1]
+            cropped_image = image[y_min:y_max+1, x_min:x_max+1]
+
+            # Create an alpha channel from the mask
+            alpha_channel = cropped_mask.copy()
+
+            # Merge alpha channel with the image
+            if cropped_image.shape[2] == 3:
+                img_patch = cv2.cvtColor(cropped_image, cv2.COLOR_RGB2RGBA)
+                img_patch[:, :, 3] = alpha_channel
+            else:
+                img_patch = cropped_image.copy()
+                img_patch[:, :, 3] = alpha_channel
+
+            # Create density map patch (cropped)
+            density_patch = np.zeros(cropped_mask.shape, dtype=np.float32)
+            # Adjust cluster positions relative to the cropped patch
+            relative_positions = cluster_positions - np.array([x_min, y_min])
+            # Place Gaussian blobs at cell positions
+            for pos in relative_positions:
+                x_rel = int(pos[0])
+                y_rel = int(pos[1])
                 if 0 <= x_rel < density_patch.shape[1] and 0 <= y_rel < density_patch.shape[0]:
                     density_patch[y_rel, x_rel] += 1.0
             # Apply Gaussian filter to create density map
-            density_patch = gaussian_filter(density_patch, sigma=4)
+            density_patch = cv2.GaussianBlur(density_patch, (15, 15), sigmaX=4)
 
             cell_count = len(cluster_positions)
 
-            # Adjust cell positions to be relative to the patch
-            relative_positions = cluster_positions - np.array([x_min, y_min])
+            # Create a unique identifier for the patch
+            patch_identifier = f"{base_filename}_cluster_{cluster_label}"
 
-            # Store the patch along with the relative positions
-            patches.append((img_patch, density_patch, cell_count, relative_positions))
+            # Save the mask as an image (for visualization/debugging)
+            mask_filename = f"{patch_identifier}_mask.png"
+            mask_filepath = os.path.join(patches_path, mask_filename)
+            cv2.imwrite(mask_filepath, cropped_mask)
+
+            # Save the patch with superimposed labels
+            save_patch_with_labels(img_patch, relative_positions, patches_path, patch_identifier)
+
+            # Store the patch along with the cluster positions and identifier
+            patches.append((img_patch, density_patch, cell_count, relative_positions, patch_identifier))
             patch_cell_counts.append(cell_count)
             patches_extracted += 1
 
-            # Save the patch with superimposed labels
-            save_patch_with_labels(img_patch, relative_positions, patches_path, base_filename, patch_index)
             patch_index += 1
 
         logging.info(f"Extracted {patches_extracted} patches from image {filename}")
@@ -193,23 +247,18 @@ def extract_patches_using_ground_truth(images_path, ground_truth_path, patches_p
 
     return patches
 
-def save_patch_with_labels(img_patch, relative_positions, patches_path, base_filename, patch_index):
+def save_patch_with_labels(img_patch, relative_positions, patches_path, patch_identifier):
     """
     Saves the image patch with superimposed labels as an image file.
 
     Parameters:
-    - img_patch: The image patch (numpy array).
+    - img_patch: The image patch with alpha channel (numpy array).
     - relative_positions: Array of cell positions relative to the patch.
     - patches_path: Path to the directory to save the patches.
-    - base_filename: Base filename of the original image.
-    - patch_index: Index of the patch for unique naming.
+    - patch_identifier: Unique identifier for the patch.
     """
     # Convert image patch to PIL Image
-    if img_patch.ndim == 2:
-        img_pil = Image.fromarray(img_patch.astype(np.uint8)).convert('RGB')
-    else:
-        img_pil = Image.fromarray(img_patch.astype(np.uint8))
-        img_pil = img_pil.convert('RGB')
+    img_pil = Image.fromarray(img_patch.astype(np.uint8))
 
     draw = ImageDraw.Draw(img_pil, 'RGBA')
 
@@ -222,23 +271,23 @@ def save_patch_with_labels(img_patch, relative_positions, patches_path, base_fil
         draw.ellipse([left_up_point, right_down_point], fill=(255, 0, 0, 128))  # Red color with 50% transparency
 
     # Save the image
-    patch_filename = f"{base_filename}_patch_{patch_index}.png"
+    patch_filename = f"{patch_identifier}.png"
     patch_filepath = os.path.join(patches_path, patch_filename)
     img_pil.save(patch_filepath)
 
-def augment_patch(img_patch, density_patch, relative_cell_positions):
+def augment_patch(img_patch, density_patch, relative_positions):
     """
     Applies random transformations to the patch and adjusts the cell positions accordingly.
 
     Parameters:
-    - img_patch: The image patch (numpy array).
+    - img_patch: The image patch with alpha channel (numpy array).
     - density_patch: The density map patch (numpy array).
-    - relative_cell_positions: Array of cell positions relative to the patch.
+    - relative_positions: Array of cell positions relative to the patch.
 
     Returns:
     - img_patch_aug: The augmented image patch.
     - density_patch_aug: The augmented density map patch.
-    - relative_cell_positions_aug: The adjusted cell positions after augmentation.
+    - relative_positions_aug: The adjusted cell positions after augmentation.
     """
     # Random rotation angle between -30 and 30 degrees
     angle = random.uniform(-30, 30)
@@ -247,155 +296,200 @@ def augment_patch(img_patch, density_patch, relative_cell_positions):
     flip_horizontal = random.choice([True, False])
     flip_vertical = random.choice([True, False])
 
+    # Get the center coordinates of the image
+    h, w = img_patch.shape[:2]
+    center = (w / 2, h / 2)
+
+    # Create the rotation matrix
+    M_rotate = cv2.getRotationMatrix2D(center, angle, 1.0)
+
     # Apply rotation to image and density map
-    img_patch_aug = rotate(img_patch, angle, reshape=False, order=1, mode='reflect')
-    density_patch_aug = rotate(density_patch, angle, reshape=False, order=1, mode='reflect')
+    img_patch_aug = cv2.warpAffine(img_patch, M_rotate, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+    density_patch_aug = cv2.warpAffine(density_patch, M_rotate, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
 
     # Adjust cell positions for rotation
-    # Compute center of the patch
-    center_y, center_x = img_patch_aug.shape[0] / 2, img_patch_aug.shape[1] / 2
-
-    # Convert positions to centered coordinates
-    coords = relative_cell_positions - np.array([center_x, center_y])
-
-    # Rotation matrix
-    theta = np.deg2rad(angle)
-    c, s = np.cos(theta), np.sin(theta)
-    rotation_matrix = np.array([[c, -s], [s, c]])
-
-    # Rotate coordinates
-    coords_rotated = coords @ rotation_matrix.T
-
-    # Convert back to image coordinates
-    relative_cell_positions_aug = coords_rotated + np.array([center_x, center_y])
+    ones = np.ones(shape=(len(relative_positions), 1))
+    points = np.hstack([relative_positions, ones])
+    relative_positions_aug = points.dot(M_rotate.T)
 
     # Apply flips
     if flip_horizontal:
-        img_patch_aug = np.fliplr(img_patch_aug)
-        density_patch_aug = np.fliplr(density_patch_aug)
-        relative_cell_positions_aug[:, 0] = img_patch_aug.shape[1] - relative_cell_positions_aug[:, 0] - 1
+        img_patch_aug = cv2.flip(img_patch_aug, 1)
+        density_patch_aug = cv2.flip(density_patch_aug, 1)
+        relative_positions_aug[:, 0] = w - relative_positions_aug[:, 0] - 1
 
     if flip_vertical:
-        img_patch_aug = np.flipud(img_patch_aug)
-        density_patch_aug = np.flipud(density_patch_aug)
-        relative_cell_positions_aug[:, 1] = img_patch_aug.shape[0] - relative_cell_positions_aug[:, 1] - 1
+        img_patch_aug = cv2.flip(img_patch_aug, 0)
+        density_patch_aug = cv2.flip(density_patch_aug, 0)
+        relative_positions_aug[:, 1] = h - relative_positions_aug[:, 1] - 1
 
     # Remove cell positions that are outside the patch boundaries
     valid_indices = (
-        (relative_cell_positions_aug[:, 0] >= 0) &
-        (relative_cell_positions_aug[:, 0] < img_patch_aug.shape[1]) &
-        (relative_cell_positions_aug[:, 1] >= 0) &
-        (relative_cell_positions_aug[:, 1] < img_patch_aug.shape[0])
+        (relative_positions_aug[:, 0] >= 0) &
+        (relative_positions_aug[:, 0] < w) &
+        (relative_positions_aug[:, 1] >= 0) &
+        (relative_positions_aug[:, 1] < h)
     )
-    relative_cell_positions_aug = relative_cell_positions_aug[valid_indices]
+    relative_positions_aug = relative_positions_aug[valid_indices]
 
     # Ensure density map remains valid
     density_patch_aug = np.clip(density_patch_aug, 0, None)
 
-    return img_patch_aug, density_patch_aug, relative_cell_positions_aug
+    return img_patch_aug, density_patch_aug, relative_positions_aug
 
-def create_synthetic_image_from_patches(patches, synthetic_image_shape, target_cell_count, synthetic_ground_truth_path, synthetic_filename):
+def create_synthetic_image_from_patches(patches, synthetic_image_shape, target_cell_count, synthetic_ground_truth_path, synthetic_filename, synthetic_images_with_patches_path):
     """
-    Creates a synthetic image and density map by placing patches onto a blank image.
+    Creates a synthetic image and density map by placing patches onto a blank image using seamless cloning.
 
     Parameters:
-    - patches: List of tuples containing image patches, density map patches, cell counts, and relative cell positions.
+    - patches: List of tuples containing image patches, density map patches, cell counts, relative cell positions, and patch identifiers.
     - synthetic_image_shape: Tuple indicating the shape of the synthetic image.
     - target_cell_count: The desired total cell count for the synthetic image.
     - synthetic_ground_truth_path: Path to save the synthetic ground truth CSV file.
     - synthetic_filename: Base filename for the synthetic image.
+    - synthetic_images_with_patches_path: Path to save the synthetic images with patch boundaries.
 
     Returns:
     - synthetic_image: 2D or 3D numpy array representing the synthetic image.
     - synthetic_density_map: 2D numpy array representing the synthetic density map.
     """
-    synthetic_image = np.zeros(synthetic_image_shape, dtype=np.float32)
-    synthetic_density_map = np.zeros(synthetic_image_shape[:2], dtype=np.float32)
+    synthetic_image = np.zeros((synthetic_image_shape[0], synthetic_image_shape[1], 3), dtype=np.uint8)  # RGB
+    synthetic_density_map = np.zeros((synthetic_image_shape[0], synthetic_image_shape[1]), dtype=np.float32)
 
     total_cell_count = 0
     attempts = 0
     max_attempts = 10000  # To prevent infinite loop
 
     cell_positions = []  # To store cell positions in the synthetic image
+    patch_boundaries = []  # To store patch boundaries and identifiers for visualization
 
     while total_cell_count < target_cell_count and attempts < max_attempts:
         attempts += 1
         # Randomly select a patch
-        img_patch, density_patch, patch_cell_count, relative_cell_positions = random.choice(patches)
+        img_patch, density_patch, patch_cell_count, relative_positions, patch_identifier = random.choice(patches)
 
         # Apply augmentation
-        img_patch_aug, density_patch_aug, relative_cell_positions_aug = augment_patch(
-            img_patch, density_patch, relative_cell_positions.copy()
+        img_patch_aug, density_patch_aug, relative_positions_aug = augment_patch(
+            img_patch, density_patch, relative_positions.copy()
         )
 
-        patch_height, patch_width = density_patch_aug.shape
+        patch_height, patch_width = img_patch_aug.shape[:2]
 
         # Randomly select a position
+        if synthetic_image_shape[0] - patch_height <= 0 or synthetic_image_shape[1] - patch_width <= 0:
+            continue  # Skip if patch is larger than synthetic image
         y = random.randint(0, synthetic_image_shape[0] - patch_height)
         x = random.randint(0, synthetic_image_shape[1] - patch_width)
 
-        # Place the image patch with blending
-        existing_image_region = synthetic_image[y:y+patch_height, x:x+patch_width]
-        existing_density_region = synthetic_density_map[y:y+patch_height, x:x+patch_width]
+        # Prepare mask from alpha channel
+        alpha_channel = img_patch_aug[:, :, 3]
+        mask = alpha_channel.copy()
+        mask[mask > 0] = 255  # Ensure mask is binary
+        mask = mask.astype(np.uint8)
 
-        # Alpha blending using Gaussian mask
-        window = np.outer(
-            cv2.getGaussianKernel(patch_height, patch_height/6),
-            cv2.getGaussianKernel(patch_width, patch_width/6)
-        )
-        window = window / window.max()  # Normalize to 1
+        # Convert images to BGR format for OpenCV
+        img_patch_bgr = cv2.cvtColor(img_patch_aug[:, :, :3], cv2.COLOR_RGB2BGR)
+        synthetic_image_bgr = cv2.cvtColor(synthetic_image, cv2.COLOR_RGB2BGR)
 
-        # Blend image patch
-        if img_patch_aug.ndim == 2:  # Grayscale image
-            img_patch_aug = img_patch_aug.astype(np.float32)
-            existing_image_region = existing_image_region.astype(np.float32)
-            blended_image = existing_image_region * (1 - window) + img_patch_aug * window
-            synthetic_image[y:y+patch_height, x:x+patch_width] = blended_image
-        else:  # Color image
-            img_patch_aug = img_patch_aug.astype(np.float32)
-            existing_image_region = existing_image_region.astype(np.float32)
-            window_3d = np.repeat(window[:, :, np.newaxis], 3, axis=2)
-            blended_image = existing_image_region * (1 - window_3d) + img_patch_aug * window_3d
-            synthetic_image[y:y+patch_height, x:x+patch_width] = blended_image
+        # Define the center position for seamlessClone
+        center = (x + patch_width // 2, y + patch_height // 2)
 
-        # Blend density map patch
-        blended_density = existing_density_region + density_patch_aug
-        synthetic_density_map[y:y+patch_height, x:x+patch_width] = blended_density
+        # Apply seamless cloning
+        try:
+            synthetic_image_bgr = cv2.seamlessClone(
+                img_patch_bgr,
+                synthetic_image_bgr,
+                mask,
+                center,
+                cv2.NORMAL_CLONE
+            )
+            # Convert back to RGB
+            synthetic_image = cv2.cvtColor(synthetic_image_bgr, cv2.COLOR_BGR2RGB)
+        except Exception as e:
+            logging.error(f"Seamless cloning failed: {e}")
+            continue
+
+        # Add density map patch
+        synthetic_density_map[y:y+patch_height, x:x+patch_width] += density_patch_aug
 
         # Update total cell count
-        total_cell_count += len(relative_cell_positions_aug)
+        total_cell_count += len(relative_positions_aug)
 
         # Adjust cell positions to synthetic image coordinates and record them
-        for pos in relative_cell_positions_aug:
+        for pos in relative_positions_aug:
             cell_x = x + pos[0]
             cell_y = y + pos[1]
             cell_positions.append([cell_x, cell_y])
+
+        # Record the patch boundary along with its identifier
+        patch_boundaries.append((x, y, x + patch_width, y + patch_height, patch_identifier))
 
     if attempts >= max_attempts:
         logging.warning(f"Reached maximum attempts while generating {synthetic_filename}. Generated cell count: {total_cell_count}")
 
     # Clip total cell count to target cell count
-    if total_cell_count > target_cell_count:
+    if total_cell_count > target_cell_count and total_cell_count > 0:
         scaling_factor = target_cell_count / total_cell_count
         synthetic_density_map *= scaling_factor
-        synthetic_image *= scaling_factor
-
-    # Convert synthetic image to uint8
-    synthetic_image_uint8 = np.clip(synthetic_image, 0, 255).astype(np.uint8)
+        synthetic_image = (synthetic_image * scaling_factor).astype(np.uint8)
 
     # Save synthetic ground truth CSV file
     synthetic_ground_truth_file = os.path.join(synthetic_ground_truth_path, synthetic_filename + '.csv')
     # Remove duplicate positions
-    cell_positions = np.unique(cell_positions, axis=0)
-    # Save cell positions as integers
-    np.savetxt(synthetic_ground_truth_file, cell_positions, delimiter=',', fmt='%d', header='X,Y', comments='')
+    if cell_positions:
+        cell_positions = np.unique(cell_positions, axis=0)
+        # Save cell positions as integers
+        np.savetxt(synthetic_ground_truth_file, cell_positions, delimiter=',', fmt='%d', header='X,Y', comments='')
+    else:
+        logging.warning(f"No cell positions recorded for {synthetic_filename}.")
+        open(synthetic_ground_truth_file, 'w').close()  # Create empty file
 
-    return synthetic_image_uint8, synthetic_density_map
+    # Create and save synthetic image with patch boundaries and names
+    save_synthetic_image_with_patches(synthetic_image, patch_boundaries, synthetic_images_with_patches_path, synthetic_filename)
+
+    return synthetic_image, synthetic_density_map
+
+def save_synthetic_image_with_patches(synthetic_image_uint8, patch_boundaries, synthetic_images_with_patches_path, synthetic_filename):
+    """
+    Saves the synthetic image with patch boundaries and patch names overlaid.
+
+    Parameters:
+    - synthetic_image_uint8: The synthetic image as a uint8 numpy array.
+    - patch_boundaries: List of tuples (x_min, y_min, x_max, y_max, patch_identifier) representing patch boundaries.
+    - synthetic_images_with_patches_path: Path to save the annotated synthetic images.
+    - synthetic_filename: Base filename for the synthetic image.
+    """
+    # Convert synthetic image to PIL Image
+    img_pil = Image.fromarray(synthetic_image_uint8).convert('RGB')
+
+    draw = ImageDraw.Draw(img_pil)
+    # Load a font
+    try:
+        font = ImageFont.truetype("arial.ttf", size=15)
+    except IOError:
+        font = ImageFont.load_default()
+
+    # Draw rectangles and patch names for each patch boundary
+    for boundary in patch_boundaries:
+        x_min, y_min, x_max, y_max, patch_identifier = boundary
+        draw.rectangle([x_min, y_min, x_max, y_max], outline='blue', width=2)
+        # Draw the patch identifier
+        text_position = (x_min + 5, y_min + 5)  # Slight offset from top-left corner
+        draw.text(text_position, patch_identifier, fill='yellow', font=font)
+
+    # Save the image
+    annotated_image_filename = synthetic_filename + '_with_patches.png'
+    annotated_image_path = os.path.join(synthetic_images_with_patches_path, annotated_image_filename)
+    img_pil.save(annotated_image_path)
 
 def main():
     """
     Main function to execute the synthetic data generation process.
     """
+    # Argument parsing (removed --noblend flag as we're using seamless cloning)
+    parser = argparse.ArgumentParser(description='Synthetic Data Generation Script')
+    args = parser.parse_args()
+
     # Step 1: Select data directory
     data_directory = select_directory()
     logging.info(f"Selected directory: {data_directory}")
@@ -466,14 +560,14 @@ def main():
         logging.info(f"Bin {i+1} [{bin_edges[i]:.2f}, {bin_edges[i+1]:.2f}): Need {samples_needed[i]} more samples.")
 
     # Step 5: Extract patches from real images and ground truth
-    print("\nExtracting patches from real images using ground truth...")
-    logging.info("Extracting patches from real images using ground truth...")
+    print("\nExtracting patches from real images using clusters...")
+    logging.info("Extracting patches from real images using clusters...")
 
     # Create 'patches' directory to save patches with labels
     patches_path = os.path.join(data_directory, 'patches')
     os.makedirs(patches_path, exist_ok=True)
 
-    patches = extract_patches_using_ground_truth(images_path, ground_truth_path, patches_path, patch_size=(64, 64), eps=20, min_samples=1)
+    patches = extract_patches_using_clusters(images_path, ground_truth_path, patches_path, eps=20, min_samples=1)
     if not patches:
         logging.error("No patches extracted. Please check your images and ground truth CSV files.")
         print("No patches extracted. Please check your images and ground truth CSV files.")
@@ -483,9 +577,11 @@ def main():
     synthetic_images_path = os.path.join(data_directory, 'synthetic_images')
     synthetic_density_maps_path = os.path.join(data_directory, 'synthetic_density_maps')
     synthetic_ground_truth_path = os.path.join(data_directory, 'synthetic_ground_truth')
+    synthetic_images_with_patches_path = os.path.join(data_directory, 'synthetic_images_with_patches')  # New directory
     os.makedirs(synthetic_images_path, exist_ok=True)
     os.makedirs(synthetic_density_maps_path, exist_ok=True)
     os.makedirs(synthetic_ground_truth_path, exist_ok=True)
+    os.makedirs(synthetic_images_with_patches_path, exist_ok=True)  # Create new directory
 
     print("\nGenerating synthetic images, density maps, and ground truth...")
     logging.info("Generating synthetic images, density maps, and ground truth...")
@@ -497,7 +593,7 @@ def main():
         if len(image_shape) == 2:
             synthetic_image_shape = (image_shape[0], image_shape[1])
         else:
-            synthetic_image_shape = image_shape
+            synthetic_image_shape = image_shape[:2]
         logging.info(f"Image shape determined from sample image: {synthetic_image_shape}")
     except Exception as e:
         logging.error(f"Failed to load sample image: {e}")
@@ -507,7 +603,8 @@ def main():
 
     synthetic_counts = []
 
-    for i in range(num_bins):
+    print("\nGenerating synthetic images...")
+    for i in tqdm(range(num_bins), desc='Generating Synthetic Images'):
         needed_samples = samples_needed[i]
         if needed_samples <= 0:
             logging.info(f"Bin {i+1} already has enough samples. Skipping.")
@@ -527,7 +624,7 @@ def main():
 
             # Generate synthetic image and density map
             synthetic_image, synthetic_density_map = create_synthetic_image_from_patches(
-                patches, synthetic_image_shape, target_cell_count, synthetic_ground_truth_path, synthetic_filename
+                patches, synthetic_image_shape, target_cell_count, synthetic_ground_truth_path, synthetic_filename, synthetic_images_with_patches_path
             )
 
             # Save synthetic image
