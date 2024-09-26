@@ -603,46 +603,52 @@ def main():
 
     synthetic_counts = []
 
+    # Calculate total images to generate
+    total_images_to_generate = sum(int(samples_needed[i]) for i in range(num_bins) if samples_needed[i] > 0)
+
     print("\nGenerating synthetic images...")
-    for i in tqdm(range(num_bins), desc='Generating Synthetic Images'):
-        needed_samples = samples_needed[i]
-        if needed_samples <= 0:
-            logging.info(f"Bin {i+1} already has enough samples. Skipping.")
-            continue  # Skip bins that are already full
-        bin_cell_counts = [
-            count for count in cell_count_values
-            if bin_edges[i] <= count < bin_edges[i+1]
-        ]
-        if not bin_cell_counts:
-            logging.warning(f"No real data in bin {i+1}. Skipping synthetic generation for this bin.")
-            continue  # Skip if no real data in this bin
-        target_cell_count = np.mean(bin_cell_counts)
-        for j in range(int(needed_samples)):
-            synthetic_filename = f'synthetic_bin{i+1}_sample{j+1}'
-            synthetic_image_path = os.path.join(synthetic_images_path, synthetic_filename + '.tiff')
-            synthetic_density_map_path = os.path.join(synthetic_density_maps_path, synthetic_filename + '.tiff')
+    with tqdm(total=total_images_to_generate, desc='Generating Synthetic Images') as pbar:
+        for i in range(num_bins):
+            needed_samples = samples_needed[i]
+            if needed_samples <= 0:
+                logging.info(f"Bin {i+1} already has enough samples. Skipping.")
+                continue  # Skip bins that are already full
+            bin_cell_counts = [
+                count for count in cell_count_values
+                if bin_edges[i] <= count < bin_edges[i+1]
+            ]
+            if not bin_cell_counts:
+                logging.warning(f"No real data in bin {i+1}. Skipping synthetic generation for this bin.")
+                continue  # Skip if no real data in this bin
+            target_cell_count = np.mean(bin_cell_counts)
+            for j in range(int(needed_samples)):
+                synthetic_filename = f'synthetic_bin{i+1}_sample{j+1}'
+                synthetic_image_path = os.path.join(synthetic_images_path, synthetic_filename + '.tiff')
+                synthetic_density_map_path = os.path.join(synthetic_density_maps_path, synthetic_filename + '.tiff')
 
-            # Generate synthetic image and density map
-            synthetic_image, synthetic_density_map = create_synthetic_image_from_patches(
-                patches, synthetic_image_shape, target_cell_count, synthetic_ground_truth_path, synthetic_filename, synthetic_images_with_patches_path
-            )
+                # Generate synthetic image and density map
+                synthetic_image, synthetic_density_map = create_synthetic_image_from_patches(
+                    patches, synthetic_image_shape, target_cell_count, synthetic_ground_truth_path, synthetic_filename, synthetic_images_with_patches_path
+                )
 
-            # Save synthetic image
-            synthetic_image_pil = Image.fromarray(synthetic_image.astype(np.uint8))
-            if synthetic_density_map.max() > 0:
-                synthetic_density_map_uint8 = np.clip(synthetic_density_map / synthetic_density_map.max() * 255, 0, 255).astype(np.uint8)
-            else:
-                synthetic_density_map_uint8 = synthetic_density_map.astype(np.uint8)
-            synthetic_density_map_pil = Image.fromarray(synthetic_density_map_uint8)
+                # Save synthetic image
+                synthetic_image_pil = Image.fromarray(synthetic_image.astype(np.uint8))
+                if synthetic_density_map.max() > 0:
+                    synthetic_density_map_uint8 = np.clip(synthetic_density_map / synthetic_density_map.max() * 255, 0, 255).astype(np.uint8)
+                else:
+                    synthetic_density_map_uint8 = synthetic_density_map.astype(np.uint8)
+                synthetic_density_map_pil = Image.fromarray(synthetic_density_map_uint8)
 
-            try:
-                synthetic_image_pil.save(synthetic_image_path)
-                synthetic_density_map_pil.save(synthetic_density_map_path)
-                synthetic_counts.append(target_cell_count)
-                logging.info(f"Saved synthetic image, density map, and ground truth: {synthetic_filename}")
-            except Exception as e:
-                logging.error(f"Failed to save synthetic data {synthetic_filename}: {e}")
-                logging.error(traceback.format_exc())
+                try:
+                    synthetic_image_pil.save(synthetic_image_path)
+                    synthetic_density_map_pil.save(synthetic_density_map_path)
+                    synthetic_counts.append(target_cell_count)
+                    logging.info(f"Saved synthetic image, density map, and ground truth: {synthetic_filename}")
+                except Exception as e:
+                    logging.error(f"Failed to save synthetic data {synthetic_filename}: {e}")
+                    logging.error(traceback.format_exc())
+
+                pbar.update(1)  # Update progress bar after each image
 
     # Step 7: Plot the updated cell count distribution
     all_cell_counts_real = cell_count_values
