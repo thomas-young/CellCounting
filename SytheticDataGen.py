@@ -32,22 +32,29 @@ def select_directory():
     root.destroy()     # Properly destroy the Tkinter window
     return folder_selected
 
-def extract_patches_using_clusters(images_path, ground_truth_path, patches_path, eps=20, min_samples=1):
+def extract_patches_and_backgrounds(images_path, ground_truth_path, cell_patches_path, background_patches_path, eps=20, min_samples=1):
     """
-    Extract cell masks from real images based on clustered cell positions.
+    Extracts cell patches and background patches from real images based on clustered cell positions.
+    Filters out background patches whose top 5% brightest pixels are brighter than 2 standard deviations above the mean.
+    Displays a histogram of the top 5% brightest pixels with the threshold.
 
     Parameters:
     - images_path: Path to the directory containing real images.
     - ground_truth_path: Path to the directory containing ground truth CSV files.
-    - patches_path: Path to the directory to save the patches with labels.
+    - cell_patches_path: Path to the directory to save the cell patches with labels.
+    - background_patches_path: Path to the directory to save background patches.
     - eps: The maximum distance between two samples for clustering.
     - min_samples: The number of samples in a neighborhood for a point to be considered as a core point.
 
     Returns:
     - patches: List of tuples containing image patches, cell counts, relative cell positions, and patch identifiers.
+    - background_patches: List of background patches after filtering.
     """
     patches = []
     patch_cell_counts = []
+    background_patches = []
+    top_5_percent_averages = []  # To store the average of top 5% brightest pixels per background patch
+    background_patch_infos = []  # To store tuples of (background_patch, avg_top_5_percent)
     image_files = sorted([
         f for f in os.listdir(images_path)
         if f.lower().endswith('.tif') or f.lower().endswith('.tiff')
@@ -55,7 +62,7 @@ def extract_patches_using_clusters(images_path, ground_truth_path, patches_path,
 
     patch_index = 0  # To keep track of patch numbering
 
-    for filename in tqdm(image_files, desc='Extracting Patches'):
+    for filename in tqdm(image_files, desc='Extracting Patches and Backgrounds'):
         image_path = os.path.join(images_path, filename)
         base_filename = os.path.splitext(filename)[0]
         ground_truth_file = os.path.join(ground_truth_path, base_filename + '.csv')
@@ -66,9 +73,11 @@ def extract_patches_using_clusters(images_path, ground_truth_path, patches_path,
 
         try:
             image = np.array(Image.open(image_path))
-            # Convert image to RGB if grayscale
+            # Convert image to RGB if grayscale or RGBA
             if len(image.shape) == 2:
                 image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+            elif image.shape[2] == 4:
+                image = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
             # Read ground truth CSV file using pandas
             try:
                 df = pd.read_csv(ground_truth_file, header=0)
@@ -91,6 +100,18 @@ def extract_patches_using_clusters(images_path, ground_truth_path, patches_path,
         img_height, img_width = image.shape[:2]
         patches_extracted = 0  # Counter for patches extracted from this image
 
+        # Initialize cell_patch_brightness per image
+        cell_patch_brightness = []
+
+        # Create total_cell_mask
+        total_cell_mask = np.zeros((img_height, img_width), dtype=np.uint8)
+        for pos in cell_positions:
+            cv2.circle(total_cell_mask, (int(pos[0]), int(pos[1])), radius=20, color=255, thickness=-1)
+        # Apply dilation to the mask
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21))
+        total_cell_mask = cv2.dilate(total_cell_mask, kernel, iterations=2)
+
+        # Proceed with extracting cell patches as before
         # Perform clustering on cell positions
         clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(cell_positions)
         labels = clustering.labels_
@@ -112,7 +133,7 @@ def extract_patches_using_clusters(images_path, ground_truth_path, patches_path,
 
             # Apply dilation to fill holes (adjust iterations if needed)
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13))
-            mask = cv2.dilate(mask, kernel, iterations=2)  # Updated to 2 iterations
+            mask = cv2.dilate(mask, kernel, iterations=2)
 
             # Find contours
             contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -174,16 +195,21 @@ def extract_patches_using_clusters(images_path, ground_truth_path, patches_path,
 
             cell_count = len(cluster_positions)
 
+            # Compute average brightness of the cell patch
+            gray_cell_patch = cv2.cvtColor(cropped_image, cv2.COLOR_RGB2GRAY)
+            avg_brightness = np.mean(gray_cell_patch[alpha_channel > 0])  # Only consider cell regions
+            cell_patch_brightness.append(avg_brightness)
+
             # Create a unique identifier for the patch
             patch_identifier = f"{base_filename}_cluster_{cluster_label}"
 
             # Save the mask as an image (for visualization/debugging)
             mask_filename = f"{patch_identifier}_mask.png"
-            mask_filepath = os.path.join(patches_path, mask_filename)
+            mask_filepath = os.path.join(cell_patches_path, mask_filename)
             cv2.imwrite(mask_filepath, cropped_mask)
 
             # Save the patch with superimposed labels
-            save_patch_with_labels(img_patch, relative_positions, patches_path, patch_identifier)
+            save_patch_with_labels(img_patch, relative_positions, cell_patches_path, patch_identifier)
 
             # Store the patch along with the cluster positions and identifier
             patches.append((img_patch, cell_count, relative_positions, patch_identifier))
@@ -194,7 +220,98 @@ def extract_patches_using_clusters(images_path, ground_truth_path, patches_path,
 
         logging.info(f"Extracted {patches_extracted} patches from image {filename}")
 
-    # Compute summary statistics
+        # Compute brightness threshold based on cell patches for this image
+        if cell_patch_brightness:
+            cell_patch_brightness = np.array(cell_patch_brightness)
+            # Determine brightness thresholds
+            cell_brightness_mean = np.mean(cell_patch_brightness)
+            cell_brightness_std = np.std(cell_patch_brightness)
+            # Set background brightness threshold below the minimum cell brightness
+            brightness_threshold = cell_brightness_mean - (1 * cell_brightness_std)
+            brightness_threshold = max(brightness_threshold, 0)  # Ensure non-negative
+            logging.info(f"Computed brightness_threshold for {filename}: {brightness_threshold}")
+        else:
+            # Default value if no cell patches were extracted
+            brightness_threshold = 50  # Adjust as needed
+            logging.info(f"Default brightness_threshold used for {filename}: {brightness_threshold}")
+
+        # Now extract background patches using the improved total_cell_mask
+        background_mask = cv2.bitwise_not(total_cell_mask)
+
+        # Find connected components in the background mask
+        num_labels, labels_im = cv2.connectedComponents(background_mask)
+        logging.info(f"Computed num_labels for {filename}: {num_labels}")
+
+        for label in range(1, num_labels):
+            component_mask = (labels_im == label).astype(np.uint8) * 255
+            # Find bounding box
+            x, y, w, h = cv2.boundingRect(component_mask)
+            if w > 30 and h > 30:  # Adjust as needed
+                background_patch = image[y:y + h, x:x + w]
+                # Check if any cell positions fall within this patch
+                cells_in_patch = cell_positions[
+                    (cell_positions[:, 0] >= x) & (cell_positions[:, 0] < x + w) &
+                    (cell_positions[:, 1] >= y) & (cell_positions[:, 1] < y + h)
+                ]
+                if len(cells_in_patch) > 0:
+                    continue  # Skip patch containing cells
+
+                # Compute average brightness of the background patch
+                gray_patch = cv2.cvtColor(background_patch, cv2.COLOR_RGB2GRAY)
+                avg_brightness_bg = np.mean(gray_patch)
+
+                # If the background patch brightness is higher than the threshold, skip it
+                if avg_brightness_bg > brightness_threshold:
+                    continue
+
+                # Compute the average of the top 5% brightest pixels
+                flattened_pixels = gray_patch.flatten()
+                sorted_pixels = np.sort(flattened_pixels)
+                num_top_pixels = max(1, int(len(sorted_pixels) * 0.05))  # At least one pixel
+                top_pixels = sorted_pixels[-num_top_pixels:]
+                avg_top_5_percent = np.mean(top_pixels)
+                top_5_percent_averages.append(avg_top_5_percent)
+
+                # Store the background patch and its top 5% average
+                background_patch_infos.append((background_patch, avg_top_5_percent))
+
+    # After processing all images
+    # Exclude background patches with top 5% averages greater than mean + 2 * std
+    if len(top_5_percent_averages) > 0:
+        top_5_percent_averages = np.array(top_5_percent_averages)
+        mean_top_5 = np.mean(top_5_percent_averages)
+        std_top_5 = np.std(top_5_percent_averages)
+        threshold = mean_top_5 + 1 * std_top_5
+        logging.info(f"Top 5% averages mean: {mean_top_5}, std: {std_top_5}, threshold: {threshold}")
+
+        # Filter background patches
+        background_patches = [
+            bp for bp, avg in background_patch_infos if avg <= threshold
+        ]
+        logging.info(f"Total background patches before filtering: {len(background_patch_infos)}")
+        logging.info(f"Total background patches after filtering: {len(background_patches)}")
+
+        # Save the filtered background patches
+        for idx, background_patch in enumerate(background_patches):
+            bg_patch_filename = f"background_patch_{idx}.png"
+            cv2.imwrite(os.path.join(background_patches_path, bg_patch_filename), cv2.cvtColor(background_patch, cv2.COLOR_RGB2BGR))
+
+        # Plot histogram of the average of top 5% brightest pixels in background patches
+        plt.figure(figsize=(10, 6))
+        plt.hist(top_5_percent_averages, bins=20, edgecolor='black', color='green')
+        plt.axvline(x=threshold, color='red', linestyle='--', label=f'Threshold ({threshold:.2f})')
+        plt.title('Histogram of Average of Top 5% Brightest Pixels in Background Patches')
+        plt.xlabel('Average Pixel Value')
+        plt.ylabel('Number of Background Patches')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+    else:
+        logging.warning("No background patches were extracted.")
+        print("\nNo background patches were extracted.")
+        background_patches = []
+
+    # Compute summary statistics for cell patches
     if patch_cell_counts:
         patch_cell_counts = np.array(patch_cell_counts)
         total_patches = len(patch_cell_counts)
@@ -222,7 +339,7 @@ def extract_patches_using_clusters(images_path, ground_truth_path, patches_path,
         print(f"Median cells per patch: {median_cells:.2f}")
         print(f"Standard deviation: {std_cells:.2f}")
 
-        # Plot histogram of cell counts by patch
+        # Plot histogram of cell counts per patch
         plt.figure(figsize=(10, 6))
         plt.hist(patch_cell_counts, bins=20, edgecolor='black', color='purple')
         plt.title('Histogram of Cell Counts per Patch')
@@ -235,7 +352,7 @@ def extract_patches_using_clusters(images_path, ground_truth_path, patches_path,
         logging.warning("No patches with cell counts were extracted.")
         print("\nNo patches with cell counts were extracted.")
 
-    return patches
+    return patches, background_patches
 
 def save_patch_with_labels(img_patch, relative_positions, patches_path, patch_identifier):
     """
@@ -265,6 +382,78 @@ def save_patch_with_labels(img_patch, relative_positions, patches_path, patch_id
     patch_filepath = os.path.join(patches_path, patch_filename)
     img_pil.save(patch_filepath)
 
+def create_synthetic_background(background_patches, synthetic_image_shape):
+    """
+    Creates a synthetic background by randomly placing background patches onto a canvas using seamless cloning.
+
+    Parameters:
+    - background_patches: List of filtered background patches.
+    - synthetic_image_shape: Tuple indicating the shape of the synthetic image.
+
+    Returns:
+    - synthetic_background: The synthetic background image.
+    """
+    if not background_patches:
+        logging.error("No background patches available to create synthetic background.")
+        raise ValueError("No background patches available to create synthetic background.")
+
+    # Start with a random background patch as the initial synthetic background
+    initial_bg_patch = random.choice(background_patches)
+    synthetic_background = cv2.resize(initial_bg_patch, (synthetic_image_shape[1], synthetic_image_shape[0]), interpolation=cv2.INTER_LINEAR)
+
+    max_attempts = 1000
+    attempts = 0
+
+    while attempts < max_attempts:
+        attempts += 1
+        # Randomly select a background patch
+        bg_patch = random.choice(background_patches)
+
+        # Random rotation of the background patch
+        angle = random.uniform(0, 360)
+        h, w = bg_patch.shape[:2]
+        center = (w / 2, h / 2)
+        M = cv2.getRotationMatrix2D(center, angle, 1.0)
+        bg_patch_rotated = cv2.warpAffine(bg_patch, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+
+        # Random scaling
+        scale = random.uniform(0.8, 1.2)
+        bg_patch_scaled = cv2.resize(bg_patch_rotated, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
+
+        patch_height, patch_width = bg_patch_scaled.shape[:2]
+
+        # Randomly select a position
+        if synthetic_image_shape[0] - patch_height <= 0 or synthetic_image_shape[1] - patch_width <= 0:
+            continue  # Skip if patch is larger than synthetic image
+
+        y = random.randint(0, synthetic_image_shape[0] - patch_height)
+        x = random.randint(0, synthetic_image_shape[1] - patch_width)
+
+        # Create mask for the patch
+        mask = 255 * np.ones((patch_height, patch_width), bg_patch_scaled.dtype)
+
+        # Position where the center of the patch will be placed
+        center_clone = (x + patch_width // 2, y + patch_height // 2)
+
+        # Ensure that the patch fits into the synthetic background
+        if (center_clone[0] - patch_width // 2 < 0 or center_clone[1] - patch_height // 2 < 0 or
+            center_clone[0] + patch_width // 2 > synthetic_image_shape[1] or center_clone[1] + patch_height // 2 > synthetic_image_shape[0]):
+            continue  # Skip if patch doesn't fit
+
+        # Perform seamless cloning
+        try:
+            synthetic_background = cv2.seamlessClone(bg_patch_scaled, synthetic_background, mask, center_clone, cv2.MIXED_CLONE)
+        except Exception as e:
+            logging.warning(f"Seamless cloning failed at attempt {attempts}: {e}")
+            continue
+
+        # Optionally, limit the number of patches added
+        if attempts >= 50:
+            break
+
+    return synthetic_background
+
+# Ensure that other functions like augment_patch, create_synthetic_image_from_patches, and save_synthetic_image_with_patches are defined as in your previous code.
 def augment_patch(img_patch, relative_positions):
     """
     Applies random transformations to the patch and adjusts the cell positions accordingly.
@@ -319,22 +508,33 @@ def augment_patch(img_patch, relative_positions):
 
     return img_patch_aug, relative_positions_aug
 
-def create_synthetic_image_from_patches(patches, synthetic_image_shape, target_cell_count, synthetic_ground_truth_path, synthetic_filename, synthetic_images_with_patches_path):
+def create_synthetic_image_from_patches(patches, background_patches, synthetic_image_shape, target_cell_count, synthetic_ground_truth_path, synthetic_filename, synthetic_images_with_patches_path, backgrounds_path):
     """
-    Creates a synthetic image by placing patches onto a blank image using seamless cloning.
+    Creates a synthetic image by placing patches onto a synthetic background using seamless cloning.
 
     Parameters:
     - patches: List of tuples containing image patches, cell counts, relative cell positions, and patch identifiers.
+    - background_patches: List of background patches to create synthetic background.
     - synthetic_image_shape: Tuple indicating the shape of the synthetic image.
     - target_cell_count: The desired total cell count for the synthetic image.
     - synthetic_ground_truth_path: Path to save the synthetic ground truth CSV file.
     - synthetic_filename: Base filename for the synthetic image.
     - synthetic_images_with_patches_path: Path to save the synthetic images with patch boundaries.
+    - backgrounds_path: Path to save the full synthetic backgrounds.
 
     Returns:
     - synthetic_image: 2D or 3D numpy array representing the synthetic image.
     """
-    synthetic_image = np.zeros((synthetic_image_shape[0], synthetic_image_shape[1], 3), dtype=np.uint8)  # RGB
+    # Create synthetic background
+    synthetic_background = create_synthetic_background(background_patches, synthetic_image_shape)
+
+    # Save the synthetic background
+    background_filename = synthetic_filename + '_background.png'
+    background_filepath = os.path.join(backgrounds_path, background_filename)
+    cv2.imwrite(background_filepath, cv2.cvtColor(synthetic_background, cv2.COLOR_RGB2BGR))
+
+    # Use synthetic_background as the starting point
+    synthetic_image = synthetic_background.copy()
 
     total_cell_count = 0
     attempts = 0
@@ -484,7 +684,6 @@ def main():
     """
     Main function to execute the synthetic data generation process.
     """
-    # Argument parsing
     parser = argparse.ArgumentParser(description='Synthetic Data Generation Script')
     args = parser.parse_args()
 
@@ -503,15 +702,15 @@ def main():
         print("Error: 'images' and/or 'ground_truth' subdirectories not found in the selected directory.")
         return
 
-    # Get list of image files
-    image_files = sorted([
-        f for f in os.listdir(images_path)
-        if f.lower().endswith('.tif') or f.lower().endswith('.tiff')
+    # Get list of ground truth CSV files
+    ground_truth_files = sorted([
+        f for f in os.listdir(ground_truth_path)
+        if f.lower().endswith('.csv')
     ])
 
-    if not image_files:
-        logging.error("No TIFF files found in 'images' directory.")
-        print("No TIFF files found in 'images' directory.")
+    if not ground_truth_files:
+        logging.error("No CSV files found in 'ground_truth' directory.")
+        print("No CSV files found in 'ground_truth' directory.")
         return
 
     # Dictionary to hold cell counts
@@ -519,21 +718,22 @@ def main():
 
     logging.info("Calculating cell counts from ground truth CSV files...")
     print("Calculating cell counts from ground truth CSV files...")
-    for filename in tqdm(image_files, desc='Calculating Cell Counts'):
-        base_filename = os.path.splitext(filename)[0]
-        ground_truth_file = os.path.join(ground_truth_path, base_filename + '.csv')
-        if not os.path.exists(ground_truth_file):
-            logging.warning(f"Ground truth file not found for image {filename}. Skipping.")
-            continue
+    for filename in tqdm(ground_truth_files, desc='Calculating Cell Counts'):
+        ground_truth_file = os.path.join(ground_truth_path, filename)
+        # Load ground truth CSV file
         try:
             df = pd.read_csv(ground_truth_file, header=0)
             if df.empty:
                 cell_count = 0
+            elif 'X' in df.columns and 'Y' in df.columns:
+                cell_positions = df[['X', 'Y']].values
+                cell_count = len(cell_positions)
             else:
-                cell_count = len(df)
+                logging.error(f"Expected columns 'X' and 'Y' in {filename}. Found columns: {df.columns.tolist()}")
+                continue
             cell_counts[filename] = cell_count
         except Exception as e:
-            logging.error(f"Failed to read ground truth file {ground_truth_file}: {e}")
+            logging.error(f"Failed to process ground truth file {filename}: {e}")
             logging.error(traceback.format_exc())
             continue
 
@@ -563,26 +763,35 @@ def main():
         logging.info(f"Bin {i+1} [{bin_edges[i]:.2f}, {bin_edges[i+1]:.2f}): Need {samples_needed[i]} more samples.")
 
     # Step 5: Extract patches from real images and ground truth
-    print("\nExtracting patches from real images using clusters...")
-    logging.info("Extracting patches from real images using clusters...")
+    print("\nExtracting cell patches and background patches from real images using clusters...")
+    logging.info("Extracting cell patches and background patches from real images using clusters...")
 
-    # Create 'patches' directory to save patches with labels
-    patches_path = os.path.join(data_directory, 'patches')
-    os.makedirs(patches_path, exist_ok=True)
+    # Create directories to save patches and backgrounds
+    cell_patches_path = os.path.join(data_directory, 'cell_patches')
+    background_patches_path = os.path.join(data_directory, 'background_patches')
+    os.makedirs(cell_patches_path, exist_ok=True)
+    os.makedirs(background_patches_path, exist_ok=True)
 
-    patches = extract_patches_using_clusters(images_path, ground_truth_path, patches_path, eps=20, min_samples=1)
+    patches, background_patches = extract_patches_and_backgrounds(images_path, ground_truth_path, cell_patches_path, background_patches_path, eps=20, min_samples=1)
     if not patches:
         logging.error("No patches extracted. Please check your images and ground truth CSV files.")
         print("No patches extracted. Please check your images and ground truth CSV files.")
+        return
+
+    if not background_patches:
+        logging.error("No background patches extracted. Please check your images.")
+        print("No background patches extracted. Please check your images.")
         return
 
     # Step 6: Generate synthetic images
     synthetic_images_path = os.path.join(data_directory, 'synthetic_images')
     synthetic_ground_truth_path = os.path.join(data_directory, 'synthetic_ground_truth')
     synthetic_images_with_patches_path = os.path.join(data_directory, 'synthetic_images_with_patches')  # New directory
+    backgrounds_path = os.path.join(data_directory, 'backgrounds')
     os.makedirs(synthetic_images_path, exist_ok=True)
     os.makedirs(synthetic_ground_truth_path, exist_ok=True)
     os.makedirs(synthetic_images_with_patches_path, exist_ok=True)  # Create new directory
+    os.makedirs(backgrounds_path, exist_ok=True)
 
     print("\nGenerating synthetic images and ground truth...")
     logging.info("Generating synthetic images and ground truth...")
@@ -628,7 +837,7 @@ def main():
 
                 # Generate synthetic image
                 synthetic_image = create_synthetic_image_from_patches(
-                    patches, synthetic_image_shape, target_cell_count, synthetic_ground_truth_path, synthetic_filename, synthetic_images_with_patches_path
+                    patches, background_patches, synthetic_image_shape, target_cell_count, synthetic_ground_truth_path, synthetic_filename, synthetic_images_with_patches_path, backgrounds_path
                 )
 
                 # Save synthetic image
@@ -659,6 +868,8 @@ def main():
 
     logging.info("Synthetic data generation completed successfully.")
     print("\nSynthetic data generation completed successfully.")
+
+# Ensure that other functions like augment_patch, create_synthetic_image_from_patches, and save_synthetic_image_with_patches are defined as in your previous code.
 
 if __name__ == "__main__":
     main()
