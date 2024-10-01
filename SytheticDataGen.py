@@ -12,6 +12,7 @@ import traceback
 import pandas as pd
 from sklearn.cluster import DBSCAN
 import argparse
+from skimage.util import random_noise 
 
 # Configure logging
 logging.basicConfig(
@@ -246,8 +247,8 @@ def extract_patches_and_backgrounds(images_path, ground_truth_path, cell_patches
             component_mask = (labels_im == label).astype(np.uint8) * 255
             # Find bounding box
             x, y, w, h = cv2.boundingRect(component_mask)
-            if w > 30 and h > 30:  # Adjust as needed
-                background_patch = image[y:y + h, x:x + w]
+            if w > 50 and h > 50:  # Adjust as needed
+                background_patch = image[y:y + 50, x:x + 50]
                 # Check if any cell positions fall within this patch
                 cells_in_patch = cell_positions[
                     (cell_positions[:, 0] >= x) & (cell_positions[:, 0] < x + w) &
@@ -382,76 +383,28 @@ def save_patch_with_labels(img_patch, relative_positions, patches_path, patch_id
     patch_filepath = os.path.join(patches_path, patch_filename)
     img_pil.save(patch_filepath)
 
-def create_synthetic_background(background_patches, synthetic_image_shape):
-    """
-    Creates a synthetic background by randomly placing background patches onto a canvas using seamless cloning.
+def create_synthetic_background(background_patches, output_size):
+    # Stack all patches to compute the overall mean and standard deviation
+    all_patches = np.stack(background_patches, axis=0)  # Shape: (num_patches, height, width)
 
-    Parameters:
-    - background_patches: List of filtered background patches.
-    - synthetic_image_shape: Tuple indicating the shape of the synthetic image.
+    # Compute the mean and standard deviation of pixel values across all patches
+    mean_noise = np.mean(all_patches)
+    std_noise = np.std(all_patches)
 
-    Returns:
-    - synthetic_background: The synthetic background image.
-    """
-    if not background_patches:
-        logging.error("No background patches available to create synthetic background.")
-        raise ValueError("No background patches available to create synthetic background.")
-
-    # Start with a random background patch as the initial synthetic background
-    initial_bg_patch = random.choice(background_patches)
-    synthetic_background = cv2.resize(initial_bg_patch, (synthetic_image_shape[1], synthetic_image_shape[0]), interpolation=cv2.INTER_LINEAR)
-
-    max_attempts = 1000
-    attempts = 0
-
-    while attempts < max_attempts:
-        attempts += 1
-        # Randomly select a background patch
-        bg_patch = random.choice(background_patches)
-
-        # Random rotation of the background patch
-        angle = random.uniform(0, 360)
-        h, w = bg_patch.shape[:2]
-        center = (w / 2, h / 2)
-        M = cv2.getRotationMatrix2D(center, angle, 1.0)
-        bg_patch_rotated = cv2.warpAffine(bg_patch, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
-
-        # Random scaling
-        scale = random.uniform(0.8, 1.2)
-        bg_patch_scaled = cv2.resize(bg_patch_rotated, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-
-        patch_height, patch_width = bg_patch_scaled.shape[:2]
-
-        # Randomly select a position
-        if synthetic_image_shape[0] - patch_height <= 0 or synthetic_image_shape[1] - patch_width <= 0:
-            continue  # Skip if patch is larger than synthetic image
-
-        y = random.randint(0, synthetic_image_shape[0] - patch_height)
-        x = random.randint(0, synthetic_image_shape[1] - patch_width)
-
-        # Create mask for the patch
-        mask = 255 * np.ones((patch_height, patch_width), bg_patch_scaled.dtype)
-
-        # Position where the center of the patch will be placed
-        center_clone = (x + patch_width // 2, y + patch_height // 2)
-
-        # Ensure that the patch fits into the synthetic background
-        if (center_clone[0] - patch_width // 2 < 0 or center_clone[1] - patch_height // 2 < 0 or
-            center_clone[0] + patch_width // 2 > synthetic_image_shape[1] or center_clone[1] + patch_height // 2 > synthetic_image_shape[0]):
-            continue  # Skip if patch doesn't fit
-
-        # Perform seamless cloning
-        try:
-            synthetic_background = cv2.seamlessClone(bg_patch_scaled, synthetic_background, mask, center_clone, cv2.MIXED_CLONE)
-        except Exception as e:
-            logging.warning(f"Seamless cloning failed at attempt {attempts}: {e}")
-            continue
-
-        # Optionally, limit the number of patches added
-        if attempts >= 50:
-            break
-
-    return synthetic_background
+    # Create a black image
+    height, width = output_size
+    synthetic_image = np.zeros((height, width), dtype=np.uint8)
+    
+    # Generate Gaussian noise
+    noise = np.random.normal(mean_noise, std_noise, (height, width))
+    
+    # Add the noise to the black image
+    synthetic_noisy_image = synthetic_image + noise
+    
+    # Clip the values to stay within valid pixel range and convert to uint8
+    synthetic_noisy_image = np.clip(synthetic_noisy_image, 0, 255).astype(np.uint8)
+    
+    return synthetic_noisy_image
 
 # Ensure that other functions like augment_patch, create_synthetic_image_from_patches, and save_synthetic_image_with_patches are defined as in your previous code.
 def augment_patch(img_patch, relative_positions):
