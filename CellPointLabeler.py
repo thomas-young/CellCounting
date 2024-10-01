@@ -490,6 +490,11 @@ class ImageLabeler(BaseDensityProcessor, QMainWindow):
         export_action.triggered.connect(self.export_density_map)
         toolbar.addAction(export_action)
 
+        # Add Export All Density Maps action
+        export_all_action = QAction("Export All Density Maps", self)
+        export_all_action.triggered.connect(self.export_all_density_maps)
+        toolbar.addAction(export_all_action)
+
     def create_sliders(self):
         """
         Create the settings dock with sliders and colormap selection.
@@ -1053,6 +1058,32 @@ class ImageLabeler(BaseDensityProcessor, QMainWindow):
         output_path = self.save_density_map(self.current_density_map, base_name)
 
         QMessageBox.information(self, "Export Successful", f"Density map saved to {output_path}.")
+
+    def export_all_density_maps(self):
+        """
+        Export Gaussian density maps for all images in the dataset.
+        """
+        for index, (base_name, image_path, label_path) in enumerate(self.matched_files):
+            print(f"Processing {base_name} for density map export...")
+
+            # Load image to get size
+            image = Image.open(image_path)
+            width, height = image.size
+
+            # Load labels
+            labels = self.load_labels(label_path)
+
+            # Generate density map
+            density_map = self.generate_density_map(labels, (width, height))
+            if density_map is None:
+                print(f"No labels found for {base_name}. Skipping.")
+                continue
+
+            # Save density map
+            output_path = self.save_density_map(density_map, base_name)
+            print(f"Density map saved to {output_path}")
+
+        QMessageBox.information(self, "Export Successful", "All density maps have been successfully exported.")
 
 
 # Additional classes and methods required by ImageLabeler
