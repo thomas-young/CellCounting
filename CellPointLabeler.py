@@ -1059,7 +1059,7 @@ class ImageLabeler(BaseDensityProcessor, QMainWindow):
 
         QMessageBox.information(self, "Export Successful", f"Density map saved to {output_path}.")
 
-    // Export all density maps functionality
+    # Export all density maps functionality
     def export_all_density_maps(self):
         """
         Export Gaussian density maps for all images in the dataset.
