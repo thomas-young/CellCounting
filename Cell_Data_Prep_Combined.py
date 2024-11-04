@@ -169,3 +169,37 @@ plt.tight_layout()
 # Save the histogram figure
 plt.savefig(os.path.join(base_folder, f'{mode.capitalize()}_Test_Train_Val.png'))
 plt.show()
+
+# Step 9: Create a boxplot for the training/testing/validation splits
+plt.figure(figsize=(10, 6))
+
+# Combine data for boxplot
+boxplot_data = [training_counts, validation_counts, testing_counts]
+
+# Create boxplot with patch_artist=True to customize colors
+box = plt.boxplot(boxplot_data, labels=['Training', 'Validation', 'Testing'], patch_artist=True)
+
+# Set colors for boxes
+colors = ['blue', 'green', 'orange']  # Colors for training, validation, and testing
+
+for patch, color in zip(box['boxes'], colors):
+    patch.set_facecolor(color)
+    patch.set_edgecolor('black')  # Optional: Set edge color
+    patch.set_linewidth(1)  # Optional: Set edge linewidth
+
+# Set colors for the median line
+for median in box['medians']:
+    median.set_color('black')  # Set median line color
+
+# Set colors for whiskers
+for whisker in box['whiskers']:
+    whisker.set_color('black')  # Set whisker color
+
+# Set labels
+plt.ylabel('Cell Count')
+
+# Save the boxplot figure
+plt.savefig(os.path.join(base_folder, f'{mode.capitalize()}_Boxplot_Test_Train_Val.png'))
+
+# Show the boxplot
+plt.show()
