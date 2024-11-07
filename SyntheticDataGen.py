@@ -12,6 +12,7 @@ import traceback
 import pandas as pd
 from sklearn.cluster import DBSCAN
 import argparse
+from skimage.util import random_noise 
 
 # Configure logging
 logging.basicConfig(
@@ -20,6 +21,8 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     level=logging.DEBUG
 )
+mode = 'skewed'  # Change to 'univariate' for univariate distribution 
+#Change to 'skewed' for skewed distribution
 
 def select_directory():
     """
@@ -341,7 +344,7 @@ def extract_patches_and_backgrounds(images_path, ground_truth_path, cell_patches
 
         # Plot histogram of cell counts per patch
         plt.figure(figsize=(10, 6))
-        plt.hist(patch_cell_counts, bins=20, edgecolor='black', color='purple')
+        plt.hist(patch_cell_counts, bins=20, edgecolor='black', color='purple', range=[0,100]) ###Try this here
         plt.title('Histogram of Cell Counts per Patch')
         plt.xlabel('Cell Count per Patch')
         plt.ylabel('Number of Patches')
@@ -717,7 +720,8 @@ def main():
 
     # Step 4: Determine samples needed for uniform distribution
     num_bins = 20
-    counts, bin_edges = np.histogram(cell_count_values, bins=num_bins)
+    counts, bin_edges = np.histogram(cell_count_values, bins=num_bins,range=(0, 800))
+    print(bin_edges)
     max_count = max(counts)
     samples_needed = max_count - counts
 
@@ -732,8 +736,8 @@ def main():
     logging.info("Extracting cell patches and background patches from real images using clusters...")
 
     # Create directories to save patches and backgrounds
-    cell_patches_path = os.path.join(data_directory, 'cell_patches')
-    background_patches_path = os.path.join(data_directory, 'background_patches')
+    cell_patches_path = os.path.join(data_directory, mode+'cell_patches')
+    background_patches_path = os.path.join(data_directory, mode+'background_patches')
     os.makedirs(cell_patches_path, exist_ok=True)
     os.makedirs(background_patches_path, exist_ok=True)
 
@@ -749,10 +753,10 @@ def main():
         return
 
     # Step 6: Generate synthetic images
-    synthetic_images_path = os.path.join(data_directory, 'synthetic_images')
-    synthetic_ground_truth_path = os.path.join(data_directory, 'synthetic_ground_truth')
-    synthetic_images_with_patches_path = os.path.join(data_directory, 'synthetic_images_with_patches')  # New directory
-    backgrounds_path = os.path.join(data_directory, 'backgrounds')
+    synthetic_images_path = os.path.join(data_directory, mode+'synthetic_images')
+    synthetic_ground_truth_path = os.path.join(data_directory, mode+'synthetic_ground_truth')
+    synthetic_images_with_patches_path = os.path.join(data_directory, mode+'synthetic_images_with_patches')  # New directory
+    backgrounds_path = os.path.join(data_directory, mode+'backgrounds')
     os.makedirs(synthetic_images_path, exist_ok=True)
     os.makedirs(synthetic_ground_truth_path, exist_ok=True)
     os.makedirs(synthetic_images_with_patches_path, exist_ok=True)  # Create new directory
@@ -792,10 +796,14 @@ def main():
                 count for count in cell_count_values
                 if bin_edges[i] <= count < bin_edges[i+1]
             ]
-            if not bin_cell_counts:
-                logging.warning(f"No real data in bin {i+1}. Skipping synthetic generation for this bin.")
-                continue  # Skip if no real data in this bin
-            target_cell_count = np.mean(bin_cell_counts)
+            if bin_cell_counts:
+                target_cell_count = np.mean(bin_cell_counts)
+            else:
+                logging.info(f"No real data in bin {i+1}. Using middle of the bin: {target_cell_count:.2f} as target cell count.")
+                target_cell_count = (bin_edges[i] + bin_edges[i+1]) / 2
+                #logging.warning(f"No real data in bin {i+1}. Skipping synthetic generation for this bin.")
+                #continue  # Skip if no real data in this bin
+            
             for j in range(int(needed_samples)):
                 synthetic_filename = f'synthetic_bin{i+1}_sample{j+1}'
                 synthetic_image_path = os.path.join(synthetic_images_path, synthetic_filename + '.tiff')
@@ -822,8 +830,18 @@ def main():
     all_cell_counts_real = cell_count_values
     all_cell_counts_synthetic = synthetic_counts
 
+    n_real = len(all_cell_counts_real)
+    n_synthetic = len(all_cell_counts_synthetic)
+
+    # Plot with updated legend labels
     plt.figure(figsize=(10, 6))
-    plt.hist([all_cell_counts_real, all_cell_counts_synthetic], bins=20, stacked=True, label=['Real Data', 'Synthetic Data'], color=['skyblue', 'salmon'], edgecolor='black')
+    plt.hist([all_cell_counts_real, all_cell_counts_synthetic],
+        bins=20,
+        stacked=True,
+        label=[f'Real Data (n={n_real})', f'Synthetic Data (n={n_synthetic})'],
+        color=['skyblue', 'salmon'],
+        edgecolor='black',
+        range=(0, 800))
     plt.title('Cell Count Distribution with Synthetic Data')
     plt.xlabel('Cell Count')
     plt.ylabel('Number of Images')
