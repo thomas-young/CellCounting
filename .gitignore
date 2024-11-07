@@ -38,3 +38,5 @@ pip-delete-this-directory.txt
 # macOS specific files
 .DS_Store
 
+cell_counting/
+cell_counting_env/
