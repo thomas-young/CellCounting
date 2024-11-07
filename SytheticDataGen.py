@@ -12,7 +12,6 @@ import traceback
 import pandas as pd
 from sklearn.cluster import DBSCAN
 import argparse
-from skimage.util import random_noise 
 
 # Configure logging
 logging.basicConfig(
@@ -406,21 +405,21 @@ def create_synthetic_background(background_patches, output_size):
     
     return synthetic_noisy_image
 
-# Ensure that other functions like augment_patch, create_synthetic_image_from_patches, and save_synthetic_image_with_patches are defined as in your previous code.
 def augment_patch(img_patch, relative_positions):
     """
     Applies random transformations to the patch and adjusts the cell positions accordingly.
+    Handles the alpha channel separately to preserve transparency.
 
     Parameters:
     - img_patch: The image patch with alpha channel (numpy array).
     - relative_positions: Array of cell positions relative to the patch.
 
     Returns:
-    - img_patch_aug: The augmented image patch.
+    - img_patch_aug: The augmented image patch with alpha channel.
     - relative_positions_aug: The adjusted cell positions after augmentation.
     """
-    # Random rotation angle between -30 and 30 degrees
-    angle = random.uniform(-30, 30)
+    # Random rotation angle between -90 and 90 degrees
+    angle = random.uniform(-90, 90)
 
     # Random flip
     flip_horizontal = random.choice([True, False])
@@ -430,25 +429,37 @@ def augment_patch(img_patch, relative_positions):
     h, w = img_patch.shape[:2]
     center = (w / 2, h / 2)
 
+    # Separate the alpha channel
+    alpha_channel = img_patch[:, :, 3]
+    rgb_channels = img_patch[:, :, :3]
+
     # Create the rotation matrix
     M_rotate = cv2.getRotationMatrix2D(center, angle, 1.0)
 
-    # Apply rotation to image
-    img_patch_aug = cv2.warpAffine(img_patch, M_rotate, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+    # Apply rotation to RGB channels
+    rgb_aug = cv2.warpAffine(rgb_channels, M_rotate, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0,0,0))
+
+    # Apply rotation to alpha channel
+    alpha_aug = cv2.warpAffine(alpha_channel, M_rotate, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
 
     # Adjust cell positions for rotation
     ones = np.ones(shape=(len(relative_positions), 1))
     points = np.hstack([relative_positions, ones])
     relative_positions_aug = points.dot(M_rotate.T)
 
-    # Apply flips
+    # Apply flips to RGB channels and alpha channel
     if flip_horizontal:
-        img_patch_aug = cv2.flip(img_patch_aug, 1)
+        rgb_aug = cv2.flip(rgb_aug, 1)
+        alpha_aug = cv2.flip(alpha_aug, 1)
         relative_positions_aug[:, 0] = w - relative_positions_aug[:, 0] - 1
 
     if flip_vertical:
-        img_patch_aug = cv2.flip(img_patch_aug, 0)
+        rgb_aug = cv2.flip(rgb_aug, 0)
+        alpha_aug = cv2.flip(alpha_aug, 0)
         relative_positions_aug[:, 1] = h - relative_positions_aug[:, 1] - 1
+
+    # Recombine RGB channels and alpha channel
+    img_patch_aug = cv2.merge((rgb_aug, alpha_aug))
 
     # Remove cell positions that are outside the patch boundaries
     valid_indices = (
@@ -460,6 +471,7 @@ def augment_patch(img_patch, relative_positions):
     relative_positions_aug = relative_positions_aug[valid_indices]
 
     return img_patch_aug, relative_positions_aug
+
 
 def create_synthetic_image_from_patches(patches, background_patches, synthetic_image_shape, target_cell_count, synthetic_ground_truth_path, synthetic_filename, synthetic_images_with_patches_path, backgrounds_path):
     """
@@ -673,6 +685,7 @@ def main():
     print("Calculating cell counts from ground truth CSV files...")
     for filename in tqdm(ground_truth_files, desc='Calculating Cell Counts'):
         ground_truth_file = os.path.join(ground_truth_path, filename)
+
         # Load ground truth CSV file
         try:
             df = pd.read_csv(ground_truth_file, header=0)
@@ -692,7 +705,6 @@ def main():
 
     # Convert cell counts to a list for plotting
     cell_count_values = list(cell_counts.values())
-
     # Step 3: Plot the current cell count distribution
     plt.figure(figsize=(10, 6))
     plt.hist(cell_count_values, bins=20, edgecolor='black', color='skyblue', label='Real Data')
