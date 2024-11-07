@@ -363,3 +363,274 @@ To add support for more pre-trained models:
        transform = weights.transforms()
        # Modify the model to remove classification layers if necessary
    ```
+
+
+# data_synthesis.py
+
+This script `data_synthesis.py` is designed to augment your existing cell counting dataset by generating synthetic images along with their corresponding ground truth annotations. It achieves this by applying various image augmentations to your original images and updating the cell positions accordingly. The goal is to expand your dataset to a desired size (default is 1000 images), which can improve the performance and robustness of machine learning models trained on this data.
+
+
+
+## Features
+
+- **Data Augmentation**: Applies random transformations such as scaling, translation, rotation, brightness/contrast adjustments, and blurring to create diverse synthetic images.
+- **Ground Truth Adjustment**: Updates cell position annotations to match the augmented images.
+- **Preprocessing**: Normalizes images and applies histogram equalization to enhance image quality.
+- **Dataset Expansion**: Automatically generates synthetic data to reach a specified total number of images.
+- **Error Handling**: Skips images or annotations that are missing or improperly formatted, providing warnings.
+
+## Directory Structure
+
+Organize your data directory as follows:
+
+```
+cell_counting/
+├── images/
+│   ├── image1.tiff
+│   ├── image2.tiff
+│   └── ...
+├── ground_truth/
+│   ├── image1.csv
+│   ├── image2.csv
+│   └── ...
+├── preprocessed/          # Will be created by the script
+└── synthetic/             # Will be created by the script
+```
+
+- **images/**: Contains the original cell images in TIFF format.
+- **ground_truth/**: Contains CSV files with cell positions corresponding to each image. Each CSV file should have columns `X` and `Y`.
+- **preprocessed/**: Directory where preprocessed images will be saved.
+- **synthetic/**: Directory where synthetic images and annotations will be saved.
+
+## Customization
+
+### Adjusting Total Images Needed
+
+By default, the script aims to expand your dataset to **1000 images**. To change this number, modify the `total_images_needed` variable in the script:
+
+```python
+total_images_needed = 1000  # Set this to your desired total number of images
+```
+
+### Modifying Augmentations
+
+The script uses the `albumentations` library for image augmentations. You can modify the augmentation pipeline in the `generate_synthetic_data` function:
+
+```python
+augmentation_pipeline = A.Compose([
+    A.Affine(scale=(0.8, 1.2), translate_percent=(-0.2, 0.2), rotate=(-30, 30), p=1.0),
+    A.RandomBrightnessContrast(p=0.5),
+    A.RandomGamma(p=0.3),
+    A.GaussianBlur(blur_limit=3, p=0.2)
+], keypoint_params=A.KeypointParams(format='xy'))
+```
+
+You can add, remove, or adjust augmentations based on your needs. Refer to the [Albumentations Documentation](https://albumentations.ai/docs/) for more options.
+
+## Understanding the Output
+
+After running the script, the `synthetic/` directory will contain:
+
+- **Synthetic Images**: Augmented images saved in PNG format.
+- **Ground Truth CSV Files**: Updated cell position annotations corresponding to each synthetic image.
+
+The filenames will follow this pattern:
+
+- Original images saved as:
+
+  ```
+  original_image_name.png
+  original_image_name.csv
+  ```
+
+- Synthetic images saved as:
+
+  ```
+  original_image_name_synthetic_1.png
+  original_image_name_synthetic_1.csv
+  original_image_name_synthetic_2.png
+  original_image_name_synthetic_2.csv
+  ...
+  ```
+
+If additional images are needed to reach the total desired count, they will be saved as:
+
+```
+original_image_name_synthetic_extra_1.png
+original_image_name_synthetic_extra_1.csv
+...
+```
+
+# feature_extraction.py
+
+This script `feature_extraction.py` is designed to extract meaningful features from synthetic cell images and their corresponding ground truth annotations. It processes images, generates Gaussian density maps based on cell positions, and computes various statistical and texture features. The extracted features are saved in CSV files for further analysis or for use in machine learning models.
+
+## Features
+
+- **Data Splitting**: Splits synthetic data into training, validation, and test sets.
+- **Gaussian Density Map Generation**: Creates density maps based on cell positions using Gaussian kernels.
+- **Feature Extraction**: Computes statistical features from density maps and texture features from images.
+- **Handles Synthetic Data**: Specifically designed to process synthetic images and their annotations.
+- **CSV Output**: Saves extracted features in CSV format for easy integration with data analysis workflows.
+
+## Directory Structure
+
+Organize your data directory as follows:
+
+```
+cell_counting/
+├── synthetic/
+│   ├── image1.png
+│   ├── image1.csv
+│   ├── image2.png
+│   ├── image2.csv
+│   └── ...
+├── features/             # Will be created by the script
+└── feature_extraction.py
+```
+
+- **synthetic/**: Contains synthetic images and their corresponding ground truth CSV files. Each image should have a matching CSV file with the same base filename.
+- **features/**: Directory where extracted features will be saved.
+
+## Understanding the Output
+
+After running the script, the `features/` directory will contain:
+
+- **`train_features.csv`**: Features extracted from training set images.
+- **`val_features.csv`**: Features extracted from validation set images.
+- **`test_features.csv`**: Features extracted from test set images.
+
+### Feature Descriptions
+
+The CSV files contain the following columns:
+
+- `filename`: Name of the image file.
+- `count`: Actual cell count in the image (number of cell positions in ground truth).
+- `total_density`: Sum of the density map values (approximate cell count).
+- `mean_density`: Mean value of the density map.
+- `std_density`: Standard deviation of the density map.
+- `glcm_contrast`: Contrast feature from Gray Level Co-occurrence Matrix (GLCM).
+- `glcm_dissimilarity`: Dissimilarity feature from GLCM.
+- `glcm_homogeneity`: Homogeneity feature from GLCM.
+- `glcm_energy`: Energy feature from GLCM.
+- `glcm_correlation`: Correlation feature from GLCM.
+- `lbp_mean`: Mean of Local Binary Pattern (LBP) values.
+- `lbp_std`: Standard deviation of LBP values.
+
+These features can be used for statistical analysis or as input for machine learning models to predict cell counts or classify images.
+
+## Customization
+
+You can customize various aspects of the feature extraction process:
+
+### Adjusting the Sigma Value
+
+The `sigma` parameter in the `generate_gaussian_density_map` function controls the spread of the Gaussian kernel. You can adjust it based on your data:
+
+```python
+def generate_gaussian_density_map(image, cell_positions, sigma=3):
+    # ...
+```
+
+### Modifying Features
+
+If you want to extract additional features or remove some, you can modify the `extract_features` function:
+
+```python
+def extract_features(image, density_map):
+    # Compute or add new features here
+    # ...
+```
+
+### Changing Data Splits
+
+To alter the proportion of data in training, validation, and test sets, adjust the `train_test_split` parameters:
+
+```python
+train_files, temp_files = train_test_split(all_files, test_size=0.3, random_state=42)
+val_files, test_files = train_test_split(temp_files, test_size=0.5, random_state=42)
+```
+
+# model_run.py
+
+This script `model_run.py` is designed to train and evaluate an ensemble regression model to predict cell counts based on extracted features from cell images. It utilizes various regression algorithms combined into a voting regressor to improve prediction accuracy. The script performs cross-validation, evaluates the model on training, validation, and test sets, and saves the trained model and evaluation results.
+
+
+## Features
+
+- **Data Loading**: Loads training, validation, and test datasets from feature CSV files.
+- **Data Preparation**: Separates features and labels, combines training and validation sets for model training.
+- **Model Training**: Trains an ensemble model using a Voting Regressor composed of Linear Regression, Ridge Regression, Decision Tree Regressor, and K-Nearest Neighbors Regressor.
+- **Cross-Validation**: Performs 10-fold cross-validation on the training set to assess model performance.
+- **Evaluation**: Evaluates the model on training, validation, and test sets, providing metrics like MSE, R² score, and accuracy within ±5% of actual count.
+- **Model Saving**: Saves the trained model using `joblib` for future use.
+- **Result Saving**: Stores evaluation results in a CSV file for easy access and visualization.
+
+## Directory Structure
+
+Organize your data directory as follows:
+
+```
+cell_counting/
+├── features/
+│   ├── train_features.csv
+│   ├── val_features.csv
+│   └── test_features.csv
+├── models/                    # Will be created by the script
+├── model_run.py
+└── ...
+```
+
+- **features/**: Contains the feature CSV files generated from the feature extraction script.
+- **models/**: Directory where the trained model will be saved.
+- **model_run.py**: The script to train and evaluate the model.
+
+## Understanding the Output
+
+After running the script, you will see output in the console detailing:
+
+- **Cross-Validation Scores**: R² scores from 10-fold cross-validation.
+- **Training Progress**: Confirmation that the model is being trained on the full dataset.
+- **Evaluation Metrics**: MSE, R² score, and accuracy within ±5% of the actual count for training, validation, and test sets.
+
+### Saved Files
+
+- **Trained Model**: The ensemble model is saved as `ensemble_model.pkl` in the `models/` directory.
+- **Evaluation Results**: A CSV file named `evaluation_results.csv` is saved in the `features/` directory, containing the evaluation metrics.
+
+### Evaluation Metrics Explained
+
+- **Mean Squared Error (MSE)**: Measures the average squared difference between the predicted and actual values.
+- **R² Score**: Represents the proportion of variance in the dependent variable that is predictable from the independent variables.
+- **Accuracy within ±5%**: Percentage of predictions that are within ±5% of the actual cell count.
+
+## Customization
+
+### Changing the Regressors
+
+You can modify the regressors used in the ensemble model by editing the `regressors` list:
+
+```python
+regressors = [
+    ('lr', LinearRegression()),
+    ('ridge', Ridge(alpha=1.0)),
+    ('dtr', DecisionTreeRegressor(max_depth=5)),
+    ('knn', KNeighborsRegressor(n_neighbors=5))
+]
+```
+
+Add or remove regressors as needed, or adjust their hyperparameters.
+
+### Adjusting Cross-Validation
+
+To change the number of folds in cross-validation or other settings, modify the `KFold` object:
+
+```python
+kfold = KFold(n_splits=10, shuffle=True, random_state=42)
+```
+
+### Using Different Evaluation Metrics
+
+You can change the scoring metric in cross-validation or add more evaluation metrics in the `evaluate_model` function.
+
+
