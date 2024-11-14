@@ -50,6 +50,7 @@
   - [Usage](#usage-3)
     - [Training the Model](#training-the-model)
     - [Configuring Hyperparameters](#configuring-hyperparameters)
+    - [Adjusting the Model](#adjusting-the-model)
   - [Understanding the Output](#understanding-the-output-2)
   - [Customization](#customization-3)
 - [model.py](#modelpy)
@@ -151,25 +152,367 @@ The project includes the following main scripts:
 
 ## CellPointLabeler.py
 
-[Content remains the same as in your original README.]
+This tool is designed for viewing and editing cell count point annotations using a graphical user interface (GUI).
+
+### Usage
+
+#### GUI Mode
+
+To run the GUI, execute the following command:
+
+```bash
+python CellPointLabeler.py
+```
+
+When prompted, select a directory containing subdirectories with images and labels structured as follows:
+
+```
+├── ground_truth
+│   ├── image1.csv
+│   ├── image2.csv
+│   └── ...
+└── images
+    ├── image1.tiff
+    ├── image2.tiff
+    └── ...
+```
+
+- **ground_truth/**: Contains CSV files with cell positions (`X`, `Y` columns) for each image.
+- **images/**: Contains the corresponding cell images in TIFF format.
+
+#### Batch Mode
+
+To run the script in batch mode and export all Gaussian density maps at once, use the `--batch` flag:
+
+```bash
+python CellPointLabeler.py --batch --input-folder /path/to/parent_folder
+```
+
+- **Specifying Sigma Value**:
+
+  ```bash
+  python CellPointLabeler.py --batch --sigma 15 --input-folder /path/to/parent_folder
+  ```
+
+  This sets the sigma value for the Gaussian filter to 15.
+
+- **If `--input-folder` Is Not Provided**:
+
+  The script will prompt you to select the parent folder via a dialog window.
 
 ---
 
 ## SyntheticDataGen.py
 
-[Content remains the same as in your original README.]
+This script generates synthetic cell images and corresponding ground truth annotations to balance the distribution of cell counts in your dataset.
+
+### Features
+
+- **Automatic Patch Extraction**: Extracts cell and background patches using clustering algorithms.
+- **Synthetic Data Generation**: Creates synthetic images by combining patches.
+- **Data Augmentation**: Applies transformations to patches for variability.
+- **Histogram Visualization**: Visualizes cell count distributions before and after synthetic data generation.
+- **Logging**: Provides detailed logs for debugging and verification.
+
+### Running the Script
+
+#### Step 1: Select Data Directory
+
+Prepare a data directory with the following structure:
+
+```
+data_directory/
+├── images/
+│   ├── image1.tiff
+│   ├── image2.tiff
+│   └── ...
+└── ground_truth/
+    ├── image1.csv
+    ├── image2.csv
+    └── ...
+```
+
+#### Step 2: Data Preparation
+
+Ensure that:
+
+- Each image in `images/` has a corresponding CSV file in `ground_truth/`.
+- Images are properly formatted and readable.
+- Ground truth CSV files contain accurate cell positions (`X`, `Y` columns).
+
+#### Step 3: Extract Patches
+
+When you run the script, it will:
+
+1. Calculate cell counts from the ground truth files.
+2. Display a histogram of the current cell count distribution.
+3. Determine the number of synthetic samples needed per bin.
+4. Extract cell and background patches.
+
+#### Step 4: Generate Synthetic Images
+
+The script will:
+
+1. Create synthetic backgrounds.
+2. Augment cell patches.
+3. Combine patches and backgrounds using seamless cloning.
+4. Generate corresponding ground truth files.
+5. Save outputs in designated directories.
+
+### Understanding the Output
+
+After execution, the following directories will be created in your `data_directory`:
+
+- **`cell_patches/`**: Extracted cell patches.
+- **`background_patches/`**: Extracted background patches.
+- **`synthetic_images/`**: Generated synthetic images.
+- **`synthetic_ground_truth/`**: Ground truth CSV files for synthetic images.
+- **`synthetic_images_with_patches/`**: Synthetic images with patch boundaries overlaid.
+- **`backgrounds/`**: Synthetic backgrounds used in image generation.
+
+### Customization
+
+You can adjust various parameters in the script:
+
+- **Clustering Parameters**: Modify `eps` and `min_samples` in the `extract_patches_and_backgrounds` function.
+- **Patch Augmentation**: Adjust the `augment_patch` function to change transformations.
+- **Target Cell Counts**: Alter `target_cell_count` calculations to control cell counts in synthetic images.
+- **Number of Bins**: Change `num_bins` to adjust cell count distribution granularity.
+- **Brightness Thresholds**: Modify brightness calculations for filtering background patches.
 
 ---
 
 ## embedding_reduction.py
 
-[Content remains the same as in your original README.]
+This script performs feature extraction and visualization of real and synthetic cell images using pre-trained convolutional neural networks (CNNs) and dimensionality reduction techniques.
+
+### Features
+
+- **Feature Extraction**: Uses pre-trained models (e.g., ResNet50, VGG16) for feature extraction.
+- **Dimensionality Reduction**: Projects features into 2D or 3D space using UMAP or t-SNE.
+- **Visualization**: Generates scatter plots colored by cell count and shaped by data type (real or synthetic).
+- **Multiple Models Support**: Easily switch between different pre-trained models.
+- **Combined Data Analysis**: Handles both real and synthetic data for comparative analysis.
+
+### Directory Structure
+
+Organize your data directory (`base_dir`) as follows:
+
+```
+base_dir/
+├── images/
+│   ├── image1.tiff
+│   ├── image2.tiff
+│   └── ...
+├── synthetic_images/
+│   ├── synthetic_image1.tiff
+│   ├── synthetic_image2.tiff
+│   └── ...
+├── ground_truth/
+│   ├── image1.csv
+│   ├── image2.csv
+│   └── ...
+└── synthetic_ground_truth/
+    ├── synthetic_image1.csv
+    ├── synthetic_image2.csv
+    └── ...
+```
+
+### Usage
+
+#### Command-Line Arguments
+
+Run the script with:
+
+```bash
+python embedding_reduction.py [options]
+```
+
+Options:
+
+- `--model`: Pre-trained model (default: `resnet50`).
+- `--batch_size`: Batch size for DataLoader (default: `32`).
+- `--use_gpu`: Use GPU if available.
+- `--save_embeddings`: Path to save embeddings (`.npz` file).
+- `--reduction`: Dimensionality reduction method (`umap` or `tsne`, default: `umap`).
+- `--n_components`: Number of dimensions (`2` or `3`, default: `3`).
+
+#### Examples
+
+- Basic Usage:
+
+  ```bash
+  python embedding_reduction.py
+  ```
+
+- Specify a Different Model:
+
+  ```bash
+  python embedding_reduction.py --model vgg16
+  ```
+
+- Use t-SNE:
+
+  ```bash
+  python embedding_reduction.py --reduction tsne
+  ```
+
+- Use GPU:
+
+  ```bash
+  python embedding_reduction.py --use_gpu
+  ```
+
+- Save Embeddings:
+
+  ```bash
+  python embedding_reduction.py --save_embeddings embeddings.npz
+  ```
+
+### Visualization
+
+#### Interpreting the Plot
+
+- **Clusters**: Similar images cluster together.
+- **Color Gradient**: Represents cell count distribution.
+- **Data Separation**: Visualizes how synthetic data compares to real data.
+
+#### 3D Visualization
+
+- Set `--n_components 3` to generate an interactive 3D scatter plot.
+
+### Customization
+
+#### Adding More Models
+
+To support additional models:
+
+1. **Import the Model and Weights**:
+
+   ```python
+   from torchvision.models import model_name, Model_Name_Weights
+   ```
+
+2. **Update `get_model_and_transform` Function**:
+
+   ```python
+   elif model_name == 'your_model':
+       weights = Model_Name_Weights.DEFAULT
+       model = your_model(weights=weights)
+       transform = weights.transforms()
+       # Modify the model as needed
+   ```
 
 ---
 
 ## Cell_Data_Prep_Combined.py
 
-[Content remains the same as in your original README.]
+This script prepares and splits your dataset into training, validation, and testing sets based on cell counts.
+
+### Features
+
+- **Data Splitting**: Splits data based on cell counts.
+- **Bin Creation**: Organizes files into bins.
+- **Mode Selection**: 'univariate' or 'skewed' distribution strategies.
+- **File Management**: Copies ground truth CSV files and images to designated folders.
+- **Visualization**: Generates histograms and boxplots of cell count distributions.
+- **Customizable Parameters**: Adjust modes, bin sizes, and cell count limits.
+
+### Directory Structure
+
+Organize your data directory as follows:
+
+```
+IDCIA_v2/
+├── ground_truth/
+│   ├── image1.csv
+│   ├── image2.csv
+│   └── ...
+├── images/
+│   ├── image1.tiff
+│   ├── image2.tiff
+│   └── ...
+├── Cell_Data_Prep_Combined.py
+└── ...
+```
+
+### Usage
+
+#### Step 1: Prepare Your Data
+
+Ensure that:
+
+- Each image in `images/` has a corresponding CSV file in `ground_truth/`.
+- Images are in TIFF format.
+- Ground truth files contain accurate cell positions.
+
+#### Step 2: Configure the Script
+
+Open `Cell_Data_Prep_Combined.py` and update:
+
+##### Set the Base Folder Path
+
+```python
+base_folder = "C:/path/to/IDCIA_v2"  # Change this to your data directory
+```
+
+##### Select the Mode
+
+```python
+mode = 'skewed'  # Options: 'univariate' or 'skewed'
+```
+
+#### Step 3: Run the Script
+
+Execute:
+
+```bash
+python Cell_Data_Prep_Combined.py
+```
+
+### Understanding the Output
+
+- **New Directories**:
+
+  ```
+  IDCIA_v2/
+  ├── skewed_ground_truth_training_data/
+  ├── skewed_ground_truth_training_images/
+  ├── skewed_testing_data/
+  ├── skewed_testing_images/
+  ├── skewed_validation_data/
+  ├── skewed_validation_images/
+  └── ...
+  ```
+
+- **Visualization Plots**:
+
+  - **Histogram**: Shows cell count distribution across datasets.
+  - **Boxplot**: Summarizes cell count distributions.
+
+### Customization
+
+#### Changing the Mode
+
+Modify the `mode` variable:
+
+```python
+mode = 'univariate'  # Options: 'univariate' or 'skewed'
+```
+
+#### Adjusting Bins and Cell Count Limits
+
+- **Number of Bins**:
+
+  ```python
+  n_bins = 20  # Number of bins
+  ```
+
+- **Cell Count Limit**:
+
+  ```python
+  if cell_count <= 800:  # Maximum cell count to include
+  ```
 
 ---
 
@@ -389,5 +732,3 @@ The script requires the following parameters, which can be adjusted in the `main
 - **Batch Size**: Adjust the `batch_size` parameter in `get_data_loader()` for different computational capabilities.
 - **Model Configuration**: Ensure that the model architecture in `model.py` matches the one used during training.
 - **GPU Usage**: Modify the device selection logic if you want to force the use of CPU or GPU.
-
-
