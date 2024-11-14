@@ -534,6 +534,23 @@ This is the main script for training the cell counting model using PyTorch.
 
 ### Usage
 
+#### Directory Structure
+
+├── dataset_handler.py
+├── generate_predictions.py
+├── main.py
+├── model.py
+└── IDCIA
+    ├── test
+    │   ├── ground_truth_maps
+    │   └── images
+    ├── train
+    │   ├── ground_truth_maps
+    │   └── images
+    └── val
+        ├── ground_truth_maps
+        └── images
+        
 #### Training the Model
 
 To train the cell counting model, run the following command:
