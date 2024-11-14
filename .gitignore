@@ -9,6 +9,7 @@ __pycache__/
 # C extensions
 *.so
 *.log
+*.png
 
 # Distribution / packaging
 .Python
@@ -30,11 +31,13 @@ coverage.xml
 *.cover
 .hypothesis/
 .pytest_cache/
-
+runs/*
+IDCIA/*
+IDCIA v2/*
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
-
+*.pth
 # macOS specific files
 .DS_Store
 

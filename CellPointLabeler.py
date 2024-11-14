@@ -136,10 +136,6 @@ class BaseDensityProcessor:
         scaled_sigma = self.sigma * scale
         density_map = gaussian_filter(density_map, sigma=scaled_sigma)
 
-        density_map -= density_map.min()
-        if density_map.max() != 0:
-            density_map /= density_map.max()
-
         # Resize density_map back to original size
         density_map_resized = np.array(
             Image.fromarray(density_map).resize((width, height), Image.BILINEAR)
@@ -244,10 +240,6 @@ class GaussianWorker(QThread):
 
         scaled_sigma = self.sigma * scale
         density_map = gaussian_filter(density_map, sigma=scaled_sigma)
-
-        density_map -= density_map.min()
-        if density_map.max() != 0:
-            density_map /= density_map.max()
 
         # Resize density_map back to original size
         density_map_resized = np.array(
