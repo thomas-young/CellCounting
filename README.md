@@ -24,7 +24,7 @@
     - [Step 4: Generate Synthetic Images](#step-4-generate-synthetic-images)
   - [Understanding the Output](#understanding-the-output)
   - [Customization](#customization)
-- [embedding_reduction.py](#embedding_reductionpy)
+- [EmbeddingReduction.py](#embedding_reductionpy)
   - [Features](#features-1)
   - [Directory Structure](#directory-structure)
   - [Usage](#usage-1)
@@ -34,7 +34,7 @@
     - [Interpreting the Plot](#interpreting-the-plot)
     - [3D Visualization](#3d-visualization)
   - [Customization](#customization-1)
-- [Cell_Data_Prep_Combined.py](#cell_data_prep_combinedpy)
+- [CellDataPrepCombined.py](#cell_data_prep_combinedpy)
   - [Features](#features-2)
   - [Directory Structure](#directory-structure-1)
   - [Usage](#usage-2)
@@ -45,7 +45,7 @@
     - [Step 3: Run the Script](#step-3-run-the-script)
   - [Understanding the Output](#understanding-the-output-1)
   - [Customization](#customization-2)
-- [main.py](#mainpy)
+- [Main.py](#mainpy)
   - [Features](#features-3)
   - [Usage](#usage-3)
     - [Training the Model](#training-the-model)
@@ -53,15 +53,15 @@
     - [Adjusting the Model](#adjusting-the-model)
   - [Understanding the Output](#understanding-the-output-2)
   - [Customization](#customization-3)
-- [model.py](#modelpy)
+- [Model.py](#modelpy)
   - [Features](#features-4)
   - [Model Architecture](#model-architecture)
   - [Customization](#customization-4)
-- [dataset_handler.py](#dataset_handlerpy)
+- [DatasetHandler.py](#dataset_handlerpy)
   - [Features](#features-5)
   - [Usage](#usage-4)
   - [Customization](#customization-5)
-- [generate_predictions.py](#generate_predictionspy)
+- [GeneratePredictions.py](#generate_predictionspy)
   - [Features](#features-6)
   - [Usage](#usage-5)
     - [Generating Predictions](#generating-predictions)
@@ -141,12 +141,12 @@ The project includes the following main scripts:
 
 - **CellPointLabeler.py**: A GUI tool for viewing and editing cell count point annotations.
 - **SyntheticDataGen.py**: Generates synthetic cell images and annotations to balance the dataset.
-- **embedding_reduction.py**: Performs feature extraction and dimensionality reduction for visualization.
-- **Cell_Data_Prep_Combined.py**: Prepares and splits the dataset into training, validation, and testing sets.
-- **main.py**: The main script for training the cell counting model.
-- **model.py**: Defines the PyTorch model architecture for cell counting.
-- **dataset_handler.py**: Handles data loading and preprocessing for the dataset.
-- **generate_predictions.py**: Generates predictions using a trained model and evaluates performance.
+- **EmbeddingReduction.py**: Performs feature extraction and dimensionality reduction for visualization.
+- **CellDataPrepCombined.py**: Prepares and splits the dataset into training, validation, and testing sets.
+- **Main.py**: The main script for training the cell counting model.
+- **Model.py**: Defines the PyTorch model architecture for cell counting.
+- **DatasetHandler.py**: Handles data loading and preprocessing for the dataset.
+- **GeneratePredictions.py**: Generates predictions using a trained model and evaluates performance.
 
 ---
 
@@ -282,7 +282,7 @@ You can adjust various parameters in the script:
 
 ---
 
-## embedding_reduction.py
+## EmbeddingReduction.py
 
 This script performs feature extraction and visualization of real and synthetic cell images using pre-trained convolutional neural networks (CNNs) and dimensionality reduction techniques.
 
@@ -405,7 +405,7 @@ To support additional models:
 
 ---
 
-## Cell_Data_Prep_Combined.py
+## CellDataPrepCombined.py
 
 This script prepares and splits your dataset into training, validation, and testing sets based on cell counts.
 
@@ -516,7 +516,7 @@ mode = 'univariate'  # Options: 'univariate' or 'skewed'
 
 ---
 
-## main.py
+## Main.py
 
 This is the main script for training the cell counting model using PyTorch.
 
@@ -616,7 +616,7 @@ def main():
 
 ---
 
-## model.py
+## Model.py
 
 This script defines the PyTorch model architecture for the cell counting task.
 
@@ -649,7 +649,7 @@ This script defines the PyTorch model architecture for the cell counting task.
 
 ---
 
-## dataset_handler.py
+## DatasetHandler.py
 
 This script handles data loading and preprocessing for the dataset.
 
@@ -686,7 +686,7 @@ train_dataset = CellDataset(
 
 ---
 
-## generate_predictions.py
+## GeneratePredictions.py
 
 This script generates predictions using a trained model and evaluates its performance.
 
