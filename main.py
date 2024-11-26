@@ -1,5 +1,3 @@
-# main.py
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -14,8 +12,8 @@ import numpy as np
 import random
 from datetime import datetime
 
-from dataset_handler import CellDataset
-from model import CellCounter
+from DatasetHandler import CellDataset
+from Model import CellCounter
 
 def transform_image(image):
     # Apply PIL Image transforms

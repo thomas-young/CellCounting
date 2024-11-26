@@ -1,7 +1,9 @@
 '''
 File: model.py
 Author: Abdurahman Mohammed
-Date: 2024-09-05
+Co-Author: Thomas Young
+Co-Author: GPT-o1
+Date: 2024-11-14
 Description: A Python script that defines a PyTorch model for the cell counting task.
 '''
 
@@ -69,7 +71,7 @@ class CellCounter(nn.Module):
             nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
             if m.bias is not None:
                 nn.init.zeros_(m.bias)
-                
+
     def forward(self, x):
         x = self.features(x)
         x = self.decoder(x)
