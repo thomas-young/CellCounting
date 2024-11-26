@@ -4,23 +4,36 @@ import numpy as np
 import shutil
 import matplotlib.pyplot as plt
 from collections import defaultdict
+import tkinter as tk
+from tkinter import filedialog
+
+# Initialize Tkinter
+root = tk.Tk()
+root.withdraw()  # Hide the root window
+
+# Prompt the user to select a directory
+base_folder = filedialog.askdirectory(title='Select the IDCIA_v2 Dataset Directory')
+
+# Check if a directory was selected
+if not base_folder:
+    print("No directory selected. Exiting.")
+    exit()
 
 # Set mode for testing data selection: 'univariate' or 'skewed'
-mode = 'skewed'
+mode = 'univariate'
 
 # Define folder paths
-base_folder = "C:/Users/Sam/Desktop/IDCIA_v2" #change this
 ground_truth_folder = os.path.join(base_folder, "ground_truth")
 images_folder = os.path.join(base_folder, "images")
 
-ground_truth_training_data_folder = os.path.join(base_folder, mode+"_ground_truth_training_data")
-training_images_folder = os.path.join(base_folder, mode+"_ground_truth_training_images")
+ground_truth_training_data_folder = os.path.join(base_folder, f"{mode}_ground_truth_training_data")
+training_images_folder = os.path.join(base_folder, f"{mode}_ground_truth_training_images")
 
-testing_data_folder = os.path.join(base_folder, mode+"_testing_data")
-testing_images_folder = os.path.join(base_folder, mode+"_testing_images")
+testing_data_folder = os.path.join(base_folder, f"{mode}_testing_data")
+testing_images_folder = os.path.join(base_folder, f"{mode}_testing_images")
 
-validation_data_folder = os.path.join(base_folder, mode+"_validation_data")
-validation_images_folder = os.path.join(base_folder, mode+"_validation_images")
+validation_data_folder = os.path.join(base_folder, f"{mode}_validation_data")
+validation_images_folder = os.path.join(base_folder, f"{mode}_validation_images")
 
 # Create new folders if they don't exist
 os.makedirs(ground_truth_training_data_folder, exist_ok=True)
@@ -54,7 +67,6 @@ for filename, count in file_counts.items():
     if 0 <= bin_index < n_bins:
         bin_dict[bin_index].append(filename)
 
-# Step 3: Select files for testing and validation based on the selected mode
 # Step 3: Select files for testing and validation based on the selected mode
 testing_files = []
 validation_files = []

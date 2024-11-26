@@ -145,7 +145,7 @@ def main():
     model.eval()
 
     # Hardcoded image and ground truth directories
-    base_dir = '/Users/tomyoung/Downloads/IDCIA v2/'
+    base_dir = '/Users/tomyoung/Downloads/CellCountData/'
     real_image_dir = os.path.join(base_dir, 'images')
     synthetic_image_dir = os.path.join(base_dir, 'synthetic_images')
     real_ground_truth_dir = os.path.join(base_dir, 'ground_truth')

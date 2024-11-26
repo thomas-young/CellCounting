@@ -48,5 +48,5 @@ ultralytics-thop==2.0.6
 urllib3==2.2.3
 opencv-python-headless
 albumentations
-
+umap-learn
 

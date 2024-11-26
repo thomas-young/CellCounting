@@ -34,39 +34,40 @@
     - [Interpreting the Plot](#interpreting-the-plot)
     - [3D Visualization](#3d-visualization)
   - [Customization](#customization-1)
-- [data_synthesis.py](#data_synthesispy)
+- [Cell_Data_Prep_Combined.py](#cell_data_prep_combinedpy)
   - [Features](#features-2)
   - [Directory Structure](#directory-structure-1)
-  - [Customization](#customization-2)
-  - [Understanding the Output](#understanding-the-output-1)
-- [feature_extraction.py](#feature_extractionpy)
-  - [Features](#features-3)
-  - [Directory Structure](#directory-structure-2)
-  - [Understanding the Output](#understanding-the-output-2)
-    - [Feature Descriptions](#feature-descriptions)
-  - [Customization](#customization-3)
-- [model_run.py](#model_runpy)
-  - [Features](#features-4)
-  - [Directory Structure](#directory-structure-3)
-  - [Understanding the Output](#understanding-the-output-3)
-    - [Saved Files](#saved-files)
-    - [Evaluation Metrics Explained](#evaluation-metrics-explained)
-  - [Customization](#customization-4)
-- [accuracy.py](#accuracypy)
-  - [Features](#features-5)
-  - [Directory Structure](#directory-structure-4)
-  - [Understanding the Output](#understanding-the-output-4)
-- [Cell_Data_Prep_Combined.py](#cell_data_prep_combinedpy)
-  - [Features](#features-6)
-  - [Directory Structure](#directory-structure-5)
   - [Usage](#usage-2)
     - [Step 1: Prepare Your Data](#step-1-prepare-your-data)
     - [Step 2: Configure the Script](#step-2-configure-the-script)
       - [Set the Base Folder Path](#set-the-base-folder-path)
       - [Select the Mode](#select-the-mode)
     - [Step 3: Run the Script](#step-3-run-the-script)
-  - [Understanding the Output](#understanding-the-output-5)
+  - [Understanding the Output](#understanding-the-output-1)
+  - [Customization](#customization-2)
+- [main.py](#mainpy)
+  - [Features](#features-3)
+  - [Usage](#usage-3)
+    - [Training the Model](#training-the-model)
+    - [Configuring Hyperparameters](#configuring-hyperparameters)
+    - [Adjusting the Model](#adjusting-the-model)
+  - [Understanding the Output](#understanding-the-output-2)
+  - [Customization](#customization-3)
+- [model.py](#modelpy)
+  - [Features](#features-4)
+  - [Model Architecture](#model-architecture)
+  - [Customization](#customization-4)
+- [dataset_handler.py](#dataset_handlerpy)
+  - [Features](#features-5)
+  - [Usage](#usage-4)
   - [Customization](#customization-5)
+- [generate_predictions.py](#generate_predictionspy)
+  - [Features](#features-6)
+  - [Usage](#usage-5)
+    - [Generating Predictions](#generating-predictions)
+    - [Configuring Paths](#configuring-paths)
+  - [Understanding the Output](#understanding-the-output-3)
+  - [Customization](#customization-6)
 
 ---
 
@@ -141,11 +142,11 @@ The project includes the following main scripts:
 - **CellPointLabeler.py**: A GUI tool for viewing and editing cell count point annotations.
 - **SyntheticDataGen.py**: Generates synthetic cell images and annotations to balance the dataset.
 - **embedding_reduction.py**: Performs feature extraction and dimensionality reduction for visualization.
-- **data_synthesis.py**: Augments the dataset by applying transformations to existing images and annotations.
-- **feature_extraction.py**: Extracts features from images and generates Gaussian density maps.
-- **model_run.py**: Trains and evaluates an ensemble regression model for cell counting.
-- **accuracy.py**: Visualizes model performance metrics.
 - **Cell_Data_Prep_Combined.py**: Prepares and splits the dataset into training, validation, and testing sets.
+- **main.py**: The main script for training the cell counting model.
+- **model.py**: Defines the PyTorch model architecture for cell counting.
+- **dataset_handler.py**: Handles data loading and preprocessing for the dataset.
+- **generate_predictions.py**: Generates predictions using a trained model and evaluates performance.
 
 ---
 
@@ -404,275 +405,6 @@ To support additional models:
 
 ---
 
-## data_synthesis.py
-
-This script augments your existing dataset by generating synthetic images and updating cell positions, aiming to expand the dataset to a desired size.
-
-### Features
-
-- **Data Augmentation**: Applies transformations like scaling, translation, rotation, brightness/contrast adjustments, and blurring.
-- **Ground Truth Adjustment**: Updates cell position annotations to match augmented images.
-- **Preprocessing**: Normalizes images and applies histogram equalization.
-- **Dataset Expansion**: Generates synthetic data to reach a specified total number of images.
-- **Error Handling**: Skips improperly formatted images or annotations, providing warnings.
-
-### Directory Structure
-
-Organize your data directory as follows:
-
-```
-cell_counting/
-├── images/
-│   ├── image1.tiff
-│   ├── image2.tiff
-│   └── ...
-├── ground_truth/
-│   ├── image1.csv
-│   ├── image2.csv
-│   └── ...
-├── preprocessed/          # Created by the script
-└── synthetic/             # Created by the script
-```
-
-### Customization
-
-#### Adjusting Total Images Needed
-
-Change the `total_images_needed` variable:
-
-```python
-total_images_needed = 1000  # Desired total number of images
-```
-
-#### Modifying Augmentations
-
-Adjust the augmentation pipeline:
-
-```python
-augmentation_pipeline = A.Compose([
-    A.Affine(scale=(0.8, 1.2), translate_percent=(-0.2, 0.2), rotate=(-30, 30), p=1.0),
-    A.RandomBrightnessContrast(p=0.5),
-    A.RandomGamma(p=0.3),
-    A.GaussianBlur(blur_limit=3, p=0.2)
-], keypoint_params=A.KeypointParams(format='xy'))
-```
-
-Refer to the [Albumentations Documentation](https://albumentations.ai/docs/) for more options.
-
-### Understanding the Output
-
-After execution, the `synthetic/` directory will contain:
-
-- **Synthetic Images**: Augmented images in PNG format.
-- **Ground Truth CSV Files**: Updated annotations.
-
-Filenames follow the pattern:
-
-- Original images:
-
-  ```
-  original_image_name.png
-  original_image_name.csv
-  ```
-
-- Synthetic images:
-
-  ```
-  original_image_name_synthetic_1.png
-  original_image_name_synthetic_1.csv
-  ...
-  ```
-
----
-
-## feature_extraction.py
-
-This script extracts features from synthetic cell images and their ground truth annotations, generating Gaussian density maps and computing statistical and texture features.
-
-### Features
-
-- **Data Splitting**: Splits data into training, validation, and test sets.
-- **Gaussian Density Map Generation**: Creates density maps using Gaussian kernels.
-- **Feature Extraction**: Computes features for model training.
-- **CSV Output**: Saves features in CSV format.
-
-### Directory Structure
-
-Organize your data directory as follows:
-
-```
-cell_counting/
-├── synthetic/
-│   ├── image1.png
-│   ├── image1.csv
-│   ├── image2.png
-│   ├── image2.csv
-│   └── ...
-├── features/             # Created by the script
-└── feature_extraction.py
-```
-
-### Understanding the Output
-
-After execution, the `features/` directory will contain:
-
-- **`train_features.csv`**
-- **`val_features.csv`**
-- **`test_features.csv`**
-
-#### Feature Descriptions
-
-Columns include:
-
-- `filename`
-- `count`
-- `total_density`
-- `mean_density`
-- `std_density`
-- `glcm_contrast`
-- `glcm_dissimilarity`
-- `glcm_homogeneity`
-- `glcm_energy`
-- `glcm_correlation`
-- `lbp_mean`
-- `lbp_std`
-
-### Customization
-
-#### Adjusting the Sigma Value
-
-Modify the `sigma` parameter:
-
-```python
-def generate_gaussian_density_map(image, cell_positions, sigma=3):
-    # ...
-```
-
-#### Modifying Features
-
-Adjust the `extract_features` function:
-
-```python
-def extract_features(image, density_map):
-    # Add or remove feature computations
-    # ...
-```
-
-#### Changing Data Splits
-
-Alter the `train_test_split` parameters:
-
-```python
-train_files, temp_files = train_test_split(all_files, test_size=0.3, random_state=42)
-val_files, test_files = train_test_split(temp_files, test_size=0.5, random_state=42)
-```
-
----
-
-## model_run.py
-
-This script trains and evaluates an ensemble regression model to predict cell counts based on extracted features.
-
-### Features
-
-- **Data Loading**: Loads datasets from feature CSV files.
-- **Data Preparation**: Separates features and labels.
-- **Model Training**: Uses a Voting Regressor with multiple regression algorithms.
-- **Cross-Validation**: Performs 10-fold cross-validation.
-- **Evaluation**: Provides metrics like MSE, R² score, and accuracy within ±5% of actual count.
-- **Model Saving**: Saves the trained model using `joblib`.
-- **Result Saving**: Stores evaluation results in a CSV file.
-
-### Directory Structure
-
-Organize your data directory as follows:
-
-```
-cell_counting/
-├── features/
-│   ├── train_features.csv
-│   ├── val_features.csv
-│   └── test_features.csv
-├── models/                    # Created by the script
-├── model_run.py
-└── ...
-```
-
-### Understanding the Output
-
-- **Cross-Validation Scores**: R² scores from cross-validation.
-- **Evaluation Metrics**: MSE, R² score, and accuracy within ±5% for each dataset.
-
-#### Saved Files
-
-- **Trained Model**: `models/ensemble_model.pkl`
-- **Evaluation Results**: `features/evaluation_results.csv`
-
-#### Evaluation Metrics Explained
-
-- **Mean Squared Error (MSE)**
-- **R² Score**
-- **Accuracy within ±5%**
-
-### Customization
-
-#### Changing the Regressors
-
-Modify the `regressors` list:
-
-```python
-regressors = [
-    ('lr', LinearRegression()),
-    ('ridge', Ridge(alpha=1.0)),
-    ('dtr', DecisionTreeRegressor(max_depth=5)),
-    ('knn', KNeighborsRegressor(n_neighbors=5))
-]
-```
-
-#### Adjusting Cross-Validation
-
-Change the `KFold` settings:
-
-```python
-kfold = KFold(n_splits=10, shuffle=True, random_state=42)
-```
-
----
-
-## accuracy.py
-
-This script visualizes the performance metrics of the trained model.
-
-### Features
-
-- **Visualization of Accuracy**: Plots accuracy within ±5% of actual count.
-- **Visualization of R² Scores**: Plots R² scores.
-- **Saves Plots**: Saves plots as PNG images.
-
-### Directory Structure
-
-Organize your data directory as follows:
-
-```
-cell_counting/
-├── features/
-│   ├── evaluation_results.csv
-├── models/
-│   ├── accuracy_plot.png       # Created by the script
-│   ├── r2_plot.png             # Created by the script
-├── accuracy.py
-└── ...
-```
-
-### Understanding the Output
-
-Generated plots in `models/`:
-
-1. **accuracy_plot.png**: Accuracy percentages for each dataset.
-2. **r2_plot.png**: R² scores for each dataset.
-
----
-
 ## Cell_Data_Prep_Combined.py
 
 This script prepares and splits your dataset into training, validation, and testing sets based on cell counts.
@@ -784,4 +516,236 @@ mode = 'univariate'  # Options: 'univariate' or 'skewed'
 
 ---
 
-**Note**: Ensure that you verify the integrity of your data after processing and that the configurations align with your project requirements.
+## main.py
+
+This is the main script for training the cell counting model using PyTorch.
+
+### Features
+
+- **Model Training**: Trains a cell counting model using a convolutional neural network (CNN) architecture.
+- **Data Loading**: Utilizes the `CellDataset` class for efficient data loading and preprocessing.
+- **Data Augmentation**: Applies transformations such as resizing, flipping, and rotation to images and density maps.
+- **Loss Functions**: Combines pixel-wise MSE loss and count-based loss for training.
+- **Optimizer and Scheduler**: Uses Adam optimizer with a learning rate scheduler for training.
+- **Selective Layer Unfreezing**: Allows unfreezing specific layers of the pre-trained model for fine-tuning.
+- **Model Saving and Early Stopping**: Implements early stopping and saves the best model based on validation loss.
+- **TensorBoard Logging**: Logs training metrics and images to TensorBoard for visualization.
+- **Device Compatibility**: Supports training on GPU (CUDA or Apple MPS) or CPU.
+
+### Usage
+
+#### Directory Structure
+```
+├── dataset_handler.py
+├── generate_predictions.py
+├── main.py
+├── model.py
+└── IDCIA
+    ├── test
+    │   ├── ground_truth_maps
+    │   └── images
+    ├── train
+    │   ├── ground_truth_maps
+    │   └── images
+    └── val
+        ├── ground_truth_maps
+        └── images
+```
+#### Training the Model
+
+To train the cell counting model, run the following command:
+
+```bash
+python main.py
+```
+
+The script will:
+
+- Initialize data loaders for training and validation datasets.
+- Create the model using the `CellCounter` class from `model.py`.
+- Train the model for the specified number of epochs.
+- Log metrics and images to TensorBoard.
+- Save the trained model weights to `cell_counter.pth`.
+
+#### Configuring Hyperparameters
+
+You can adjust hyperparameters such as batch size, number of epochs, and learning rate directly in the `main()` function:
+
+```python
+def main():
+    # Set hyperparameters
+    batch_size = 8
+    num_epochs = 100
+    learning_rate = 1e-3
+    # ...
+```
+
+#### Adjusting the Model
+
+- **Unfreezing Layers**: Modify the `unfreeze_from_layer` parameter when creating the model to unfreeze layers starting from a specific index:
+
+  ```python
+  model = CellCounter(pretrained=True, freeze_features=True, unfreeze_from_layer=17)
+  ```
+
+- **Learning Rates**: The script uses different learning rates for different parts of the model:
+
+  - **Pre-trained Layers**: Lower learning rate (`learning_rate * 0.1`).
+  - **New Layers (Decoder)**: Standard learning rate (`learning_rate`).
+
+### Understanding the Output
+
+- **Training Logs**: Printed in the console, showing epoch number, training loss, MAE, and RMSE.
+- **TensorBoard Logs**: Metrics and images are logged to TensorBoard. To view them, run:
+
+  ```bash
+  tensorboard --logdir runs/
+  ```
+
+  Then open the provided URL in a web browser.
+
+- **Saved Model**: The best model is saved as `cell_counter.pth` in the current directory.
+
+### Customization
+
+- **Data Paths**: Ensure that the data directories specified in `get_data_loaders()` match your dataset structure.
+- **Model Parameters**: Adjust the model architecture in `model.py` if necessary.
+- **Logging**: Modify the logging frequency or add additional logs as needed.
+- **Early Stopping and Scheduler**: Adjust `patience` and `factor` in the learning rate scheduler and early stopping mechanism.
+- **Device Selection**: The script automatically selects the best available device, but you can modify it if needed.
+
+---
+
+## model.py
+
+This script defines the PyTorch model architecture for the cell counting task.
+
+### Features
+
+- **Pre-trained VGG16 Backbone**: Uses VGG16 as the feature extractor, optionally with pre-trained weights.
+- **Selective Layer Freezing**: Allows freezing of early layers and unfreezing of later layers for fine-tuning.
+- **Decoder Network**: Adds a decoder network to upsample and produce the density map output.
+- **Weight Initialization**: Custom weight initialization for the decoder layers.
+- **Adjustable Architecture**: The decoder can be customized to change model capacity.
+
+### Model Architecture
+
+- **Feature Extractor (`self.features`)**: VGG16 convolutional layers are used to extract features from input images.
+- **Decoder (`self.decoder`)**: A series of convolutional and upsampling layers that convert feature maps to density maps.
+- **Forward Pass**: Input images are passed through the feature extractor and decoder to produce the output density map.
+
+### Customization
+
+- **Unfreezing Layers**: Adjust `unfreeze_from_layer` in the `CellCounter` class to control which layers are trainable.
+  - To unfreeze from a specific layer:
+
+    ```python
+    model = CellCounter(pretrained=True, freeze_features=True, unfreeze_from_layer=17)
+    ```
+
+- **Decoder Structure**: Modify the decoder layers in `self.decoder` to change the model capacity.
+- **Weight Initialization**: Customize the `init_weights` method for different initialization strategies.
+- **Printing Layer Information**: The script prints out layer indices and whether they are trainable, which can be useful for debugging.
+
+---
+
+## dataset_handler.py
+
+This script handles data loading and preprocessing for the dataset.
+
+### Features
+
+- **Custom Dataset Class**: Implements the `CellDataset` class inheriting from `torch.utils.data.Dataset`.
+- **Image and Density Map Loading**: Loads images and corresponding density maps from specified paths.
+- **Data Transformations**: Applies synchronized random transformations to both images and density maps.
+- **Scaling Density Maps**: Scales density maps by a specified factor to adjust the loss sensitivity.
+- **Count Verification**: Includes optional verification of cell counts before and after scaling.
+
+### Usage
+
+The `CellDataset` class is used within the `main.py` script to create dataset objects for training and validation:
+
+```python
+train_dataset = CellDataset(
+    train_image_paths,
+    transform_image=transform_image,
+    transform_density_map=transform_density_map,
+    scaling_factor=1000.0  # Adjust as needed
+)
+```
+
+- **Transform Functions**: Define `transform_image` and `transform_density_map` functions to apply data augmentations.
+- **Synchronization of Transforms**: Random transformations are synchronized between images and density maps to maintain alignment.
+
+### Customization
+
+- **Scaling Factor**: Adjust `scaling_factor` to change how density maps are scaled.
+- **Transformations**: Modify `transform_image` and `transform_density_map` functions in `main.py` to change data augmentation strategies.
+- **Data Paths**: Ensure that image and density map paths are correctly specified and that the directory structure is consistent.
+- **Count Verification**: Uncomment the print statements in the `__getitem__` method to verify counts during data loading.
+
+---
+
+## generate_predictions.py
+
+This script generates predictions using a trained model and evaluates its performance.
+
+### Features
+
+- **Model Loading**: Loads a trained model from a checkpoint file.
+- **Data Loading**: Creates a DataLoader for test images.
+- **Prediction Generation**: Generates predicted density maps and computes cell counts.
+- **Performance Evaluation**: Calculates Mean Absolute Error (MAE) and Root Mean Squared Error (RMSE) between predicted and actual cell counts.
+- **Results Saving**: Saves the predictions and actual counts to a CSV file for further analysis.
+- **Device Compatibility**: Supports inference on GPU (CUDA or Apple MPS) or CPU.
+
+### Usage
+
+#### Generating Predictions
+
+To generate predictions and evaluate the model, run:
+
+```bash
+python generate_predictions.py
+```
+
+#### Configuring Paths
+
+The script requires the following parameters, which can be adjusted in the `main()` function:
+
+- **Checkpoint Path**: Path to the saved model weights.
+
+  ```python
+  checkpoint_path = "cell_counter.pth"
+  ```
+
+- **Image Directory**: Directory containing test images.
+
+  ```python
+  image_dir = "IDCIA/test/images"
+  ```
+
+- **Output File**: Path to save the predictions CSV file.
+
+  ```python
+  output_file = "predictions.csv"
+  ```
+
+### Understanding the Output
+
+- **Predictions CSV**: The script saves a CSV file containing:
+
+  - `image_path`: Path to the input image.
+  - `actual_count`: Actual cell count from the ground truth density map.
+  - `predicted_count`: Predicted cell count from the model's output.
+
+- **Performance Metrics**: Prints overall MAE and RMSE to the console.
+
+- **Detailed Results**: You can inspect the CSV file to analyze the model's performance on individual images.
+
+### Customization
+
+- **Data Paths**: Update the `checkpoint_path`, `image_dir`, and `output_file` in the `main()` function as needed.
+- **Batch Size**: Adjust the `batch_size` parameter in `get_data_loader()` for different computational capabilities.
+- **Model Configuration**: Ensure that the model architecture in `model.py` matches the one used during training.
+- **GPU Usage**: Modify the device selection logic if you want to force the use of CPU or GPU.

@@ -21,7 +21,7 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     level=logging.DEBUG
 )
-mode = 'skewed'  # Change to 'univariate' for univariate distribution 
+mode = 'univariate'  # Change to 'univariate' for univariate distribution 
 #Change to 'skewed' for skewed distribution
 
 def select_directory():
