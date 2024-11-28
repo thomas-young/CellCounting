@@ -325,7 +325,7 @@ base_dir/
 Run the script with:
 
 ```bash
-python embedding_reduction.py [options]
+python EmbeddingReduction.py [options]
 ```
 
 Options:
@@ -342,31 +342,31 @@ Options:
 - Basic Usage:
 
   ```bash
-  python embedding_reduction.py
+  python EmbeddingReduction.py
   ```
 
 - Specify a Different Model:
 
   ```bash
-  python embedding_reduction.py --model vgg16
+  python EmbeddingReduction.py --model vgg16
   ```
 
 - Use t-SNE:
 
   ```bash
-  python embedding_reduction.py --reduction tsne
+  python EmbeddingReduction.py --reduction tsne
   ```
 
 - Use GPU:
 
   ```bash
-  python embedding_reduction.py --use_gpu
+  python EmbeddingReduction.py --use_gpu
   ```
 
 - Save Embeddings:
 
   ```bash
-  python embedding_reduction.py --save_embeddings embeddings.npz
+  python EmbeddingReduction.py --save_embeddings embeddings.npz
   ```
 
 ### Visualization
@@ -432,7 +432,7 @@ IDCIA_v2/
 │   ├── image1.tiff
 │   ├── image2.tiff
 │   └── ...
-├── Cell_Data_Prep_Combined.py
+├── CellDataPrepCombined.py
 └── ...
 ```
 
@@ -448,7 +448,7 @@ Ensure that:
 
 #### Step 2: Configure the Script
 
-Open `Cell_Data_Prep_Combined.py` and update:
+Open `CellDataPrepCombined.py` and update:
 
 ##### Set the Base Folder Path
 
@@ -467,7 +467,7 @@ mode = 'skewed'  # Options: 'univariate' or 'skewed'
 Execute:
 
 ```bash
-python Cell_Data_Prep_Combined.py
+python CellDataPrepCombined.py
 ```
 
 ### Understanding the Output
@@ -536,10 +536,10 @@ This is the main script for training the cell counting model using PyTorch.
 
 #### Directory Structure
 ```
-├── dataset_handler.py
-├── generate_predictions.py
-├── main.py
-├── model.py
+├── DatasetHandler.py
+├── GeneratePredictions.py
+├── Main.py
+├── Model.py
 └── IDCIA
     ├── test
     │   ├── ground_truth_maps
@@ -556,13 +556,13 @@ This is the main script for training the cell counting model using PyTorch.
 To train the cell counting model, run the following command:
 
 ```bash
-python main.py
+python Main.py
 ```
 
 The script will:
 
 - Initialize data loaders for training and validation datasets.
-- Create the model using the `CellCounter` class from `model.py`.
+- Create the model using the `CellCounter` class from `Model.py`.
 - Train the model for the specified number of epochs.
 - Log metrics and images to TensorBoard.
 - Save the trained model weights to `cell_counter.pth`.
@@ -609,7 +609,7 @@ def main():
 ### Customization
 
 - **Data Paths**: Ensure that the data directories specified in `get_data_loaders()` match your dataset structure.
-- **Model Parameters**: Adjust the model architecture in `model.py` if necessary.
+- **Model Parameters**: Adjust the model architecture in `Model.py` if necessary.
 - **Logging**: Modify the logging frequency or add additional logs as needed.
 - **Early Stopping and Scheduler**: Adjust `patience` and `factor` in the learning rate scheduler and early stopping mechanism.
 - **Device Selection**: The script automatically selects the best available device, but you can modify it if needed.
@@ -663,7 +663,7 @@ This script handles data loading and preprocessing for the dataset.
 
 ### Usage
 
-The `CellDataset` class is used within the `main.py` script to create dataset objects for training and validation:
+The `CellDataset` class is used within the `Main.py` script to create dataset objects for training and validation:
 
 ```python
 train_dataset = CellDataset(
@@ -680,7 +680,7 @@ train_dataset = CellDataset(
 ### Customization
 
 - **Scaling Factor**: Adjust `scaling_factor` to change how density maps are scaled.
-- **Transformations**: Modify `transform_image` and `transform_density_map` functions in `main.py` to change data augmentation strategies.
+- **Transformations**: Modify `transform_image` and `transform_density_map` functions in `Main.py` to change data augmentation strategies.
 - **Data Paths**: Ensure that image and density map paths are correctly specified and that the directory structure is consistent.
 - **Count Verification**: Uncomment the print statements in the `__getitem__` method to verify counts during data loading.
 
@@ -706,7 +706,7 @@ This script generates predictions using a trained model and evaluates its perfor
 To generate predictions and evaluate the model, run:
 
 ```bash
-python generate_predictions.py
+python GeneratePredictions.py
 ```
 
 #### Configuring Paths
@@ -747,5 +747,5 @@ The script requires the following parameters, which can be adjusted in the `main
 
 - **Data Paths**: Update the `checkpoint_path`, `image_dir`, and `output_file` in the `main()` function as needed.
 - **Batch Size**: Adjust the `batch_size` parameter in `get_data_loader()` for different computational capabilities.
-- **Model Configuration**: Ensure that the model architecture in `model.py` matches the one used during training.
+- **Model Configuration**: Ensure that the model architecture in `Model.py` matches the one used during training.
 - **GPU Usage**: Modify the device selection logic if you want to force the use of CPU or GPU.
