@@ -1,3 +1,14 @@
+'''
+File: SyntheticDataGen.py
+Author: Tom Young
+Co-Author: GPT-o1
+Generative AI Usage: GPT-o1 was used to help implement logging, document funcitons, and apply augmentations to patches
+Date: 2024-12-13
+Description: A Python script that extracts cell patches, creates synthetic backgrounds, 
+and adds cell patches to those backgrounds to achieve uniform cell count distribution
+'''
+
+
 import os
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont

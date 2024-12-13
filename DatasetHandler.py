@@ -1,3 +1,10 @@
+'''
+File: DatasetHandler.py
+Author: Abdurahman Mohammed
+Co-Author: Thomas Young
+Date: 2024-12-13
+Description: A Python script that loads data for training
+'''
 import torch
 from torch.utils.data import Dataset
 from PIL import Image

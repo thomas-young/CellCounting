@@ -2,8 +2,7 @@
 File: GeneratePredictions.py
 Author: Abdurahman Mohammed
 Co-Author: Thomas Young
-Co-Author: GPT-o1
-Date: 2024-11-14
+Date: 2024-12-13
 Description: A Python script that generates predictions using a trained model and saves them to a CSV file.
 
 '''
@@ -150,4 +149,4 @@ def main(checkpoint_path, image_dir, output_file):
     print(f"Test MAE: {mae:.4f}, RMSE: {rmse:.4f}")
 
 if __name__ == "__main__":
-    main("best_model_frozen_vgg_density.pth", "IDCIA/test/images", "predictions.csv")
+    main("best_model_unfrozen_vgg_density_w_syn.pth.pth", "IDCIA/test/images", "predictions.csv")

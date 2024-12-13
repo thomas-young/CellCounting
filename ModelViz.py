@@ -1,3 +1,12 @@
+'''
+File: ModelViz.py
+Author: Thomas Young
+Co-Author: GPT-o1
+Generative AI Usage: GPT-o1 was used to help me stylize the visual
+Date: 2024-12-13
+Description: A Python script that creates an illustration of a CNN
+'''
+
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import visualtorch

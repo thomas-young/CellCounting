@@ -2,73 +2,80 @@
 
 ## Table of Contents
 
-- [Introduction](#introduction)
-- [Setup](#setup)
-  - [Prerequisites](#prerequisites)
-  - [Setting Up the Virtual Environment](#setting-up-the-virtual-environment)
-    - [Step 1: Create a Virtual Environment](#step-1-create-a-virtual-environment)
-    - [Step 2: Activate the Virtual Environment](#step-2-activate-the-virtual-environment)
-    - [Step 3: Install Required Dependencies](#step-3-install-required-dependencies)
-    - [Step 4: Deactivate the Virtual Environment](#step-4-deactivate-the-virtual-environment)
-- [Scripts Overview](#scripts-overview)
-- [CellPointLabeler.py](#cellpointlabelerpy)
-  - [Usage](#usage)
-    - [GUI Mode](#gui-mode)
-    - [Batch Mode](#batch-mode)
-- [SyntheticDataGen.py](#syntheticdatagenpy)
-  - [Features](#features)
-  - [Running the Script](#running-the-script)
-    - [Step 1: Select Data Directory](#step-1-select-data-directory)
-    - [Step 2: Data Preparation](#step-2-data-preparation)
-    - [Step 3: Extract Patches](#step-3-extract-patches)
-    - [Step 4: Generate Synthetic Images](#step-4-generate-synthetic-images)
-  - [Understanding the Output](#understanding-the-output)
-  - [Customization](#customization)
-- [EmbeddingReduction.py](#embeddingreductionpy)
-  - [Features](#features-1)
-  - [Directory Structure](#directory-structure)
-  - [Usage](#usage-1)
-    - [Command-Line Arguments](#command-line-arguments)
-    - [Examples](#examples)
-  - [Visualization](#visualization)
-    - [Interpreting the Plot](#interpreting-the-plot)
-    - [3D Visualization](#3d-visualization)
-  - [Customization](#customization-1)
-- [CellDataPrepCombined.py](#celldataprepcombinedpy)
-  - [Features](#features-2)
-  - [Directory Structure](#directory-structure-1)
-  - [Usage](#usage-2)
-    - [Step 1: Prepare Your Data](#step-1-prepare-your-data)
-    - [Step 2: Configure the Script](#step-2-configure-the-script)
-      - [Set the Base Folder Path](#set-the-base-folder-path)
-      - [Select the Mode](#select-the-mode)
-    - [Step 3: Run the Script](#step-3-run-the-script)
-  - [Understanding the Output](#understanding-the-output-1)
-  - [Customization](#customization-2)
-- [Main.py](#mainpy)
-  - [Features](#features-3)
-  - [Usage](#usage-3)
-    - [Training the Model](#training-the-model)
-    - [Configuring Hyperparameters](#configuring-hyperparameters)
-    - [Adjusting the Model](#adjusting-the-model)
-  - [Understanding the Output](#understanding-the-output-2)
-  - [Customization](#customization-3)
-- [Model.py](#modelpy)
-  - [Features](#features-4)
-  - [Model Architecture](#model-architecture)
-  - [Customization](#customization-4)
-- [DatasetHandler.py](#datasethandlerpy)
-  - [Features](#features-5)
-  - [Usage](#usage-4)
-  - [Customization](#customization-5)
-- [GeneratePredictions.py](#generatepredictionspy)
-  - [Features](#features-6)
-  - [Usage](#usage-5)
-    - [Generating Predictions](#generating-predictions)
-    - [Configuring Paths](#configuring-paths)
-  - [Understanding the Output](#understanding-the-output-3)
-  - [Customization](#customization-6)
-
+- [Cell Counting Project Documentation](#cell-counting-project-documentation)
+  - [Table of Contents](#table-of-contents)
+  - [Introduction](#introduction)
+  - [Setup](#setup)
+    - [Prerequisites](#prerequisites)
+    - [Setting Up the Virtual Environment](#setting-up-the-virtual-environment)
+      - [Step 1: Create a Virtual Environment](#step-1-create-a-virtual-environment)
+      - [Step 2: Activate the Virtual Environment](#step-2-activate-the-virtual-environment)
+      - [Step 3: Install Required Dependencies](#step-3-install-required-dependencies)
+      - [Step 4: Deactivate the Virtual Environment](#step-4-deactivate-the-virtual-environment)
+  - [Scripts Overview](#scripts-overview)
+  - [CellPointLabeler.py](#cellpointlabelerpy)
+    - [Usage](#usage)
+      - [GUI Mode](#gui-mode)
+      - [Batch Mode](#batch-mode)
+  - [CellDataPrepCombined.py](#celldataprepcombinedpy)
+    - [Features](#features)
+    - [Directory Structure](#directory-structure)
+    - [Usage](#usage-1)
+      - [Step 1: Prepare Your Data](#step-1-prepare-your-data)
+      - [Step 2: Configure the Script](#step-2-configure-the-script)
+        - [Select the Mode](#select-the-mode)
+      - [Step 3: Run the Script](#step-3-run-the-script)
+    - [Understanding the Output](#understanding-the-output)
+    - [Customization](#customization)
+      - [Changing the Mode](#changing-the-mode)
+      - [Adjusting Bins and Cell Count Limits](#adjusting-bins-and-cell-count-limits)
+  - [SyntheticDataGen.py](#syntheticdatagenpy)
+    - [Features](#features-1)
+    - [Running the Script](#running-the-script)
+      - [Step 1: Select Data Directory](#step-1-select-data-directory)
+      - [Step 2: Data Preparation](#step-2-data-preparation)
+      - [Step 3: Extract Patches](#step-3-extract-patches)
+      - [Step 4: Generate Synthetic Images](#step-4-generate-synthetic-images)
+    - [Understanding the Output](#understanding-the-output-1)
+    - [Customization](#customization-1)
+  - [EmbeddingReduction.py](#embeddingreductionpy)
+    - [Features](#features-2)
+    - [Directory Structure](#directory-structure-1)
+    - [Usage](#usage-2)
+      - [Command-Line Arguments](#command-line-arguments)
+      - [Examples](#examples)
+    - [Visualization](#visualization)
+      - [Interpreting the Plot](#interpreting-the-plot)
+      - [3D Visualization](#3d-visualization)
+    - [Customization](#customization-2)
+      - [Adding More Models](#adding-more-models)
+  - [Main.py](#mainpy)
+    - [Features](#features-3)
+    - [Usage](#usage-3)
+      - [Directory Structure](#directory-structure-2)
+      - [Training the Model](#training-the-model)
+      - [Configuring Hyperparameters](#configuring-hyperparameters)
+      - [Adjusting the Model](#adjusting-the-model)
+    - [Understanding the Output](#understanding-the-output-2)
+    - [Customization](#customization-3)
+  - [Model.py](#modelpy)
+    - [Features](#features-4)
+    - [Model Architecture](#model-architecture)
+    - [Customization](#customization-4)
+  - [DatasetHandler.py](#datasethandlerpy)
+    - [Features](#features-5)
+    - [Usage](#usage-4)
+    - [Customization](#customization-5)
+  - [GeneratePredictions.py](#generatepredictionspy)
+    - [Features](#features-6)
+    - [Usage](#usage-5)
+      - [Generating Predictions](#generating-predictions)
+      - [Configuring Paths](#configuring-paths)
+    - [Understanding the Output](#understanding-the-output-3)
+    - [Customization](#customization-6)
+  - [ModelViz.py](#modelvizpy)
+    - [Features](#features-7)
+    - [Usage](#usage-6)
 ---
 
 ## Introduction
@@ -125,6 +132,80 @@ pip install -r requirements.txt
 
 This will install all the necessary dependencies for the project.
 
+list of requirements is as follows:
+```
+absl-py==2.1.0
+albucore==0.0.21
+albumentations==1.4.22
+annotated-types==0.7.0
+certifi==2024.8.30
+charset-normalizer==3.3.2
+contourpy==1.3.0
+cycler==0.12.1
+eval_type_backport==0.2.0
+filelock==3.16.0
+fonttools==4.53.1
+fsspec==2024.9.0
+gitdb==4.0.11
+GitPython==3.1.43
+grpcio==1.68.1
+idna==3.10
+imageio==2.36.1
+Jinja2==3.1.4
+joblib==1.4.2
+kiwisolver==1.4.7
+lazy_loader==0.4
+llvmlite==0.43.0
+Markdown==3.7
+MarkupSafe==2.1.5
+matplotlib==3.9.2
+mpmath==1.3.0
+networkx==3.3
+numba==0.60.0
+numpy==1.26.4
+opencv-python==4.10.0.84
+opencv-python-headless==4.10.0.84
+packaging==24.1
+pandas==2.2.2
+pillow==10.4.0
+protobuf==5.29.1
+psutil==6.0.0
+py-cpuinfo==9.0.0
+pydantic==2.10.3
+pydantic_core==2.27.1
+pynndescent==0.5.13
+pyparsing==3.1.4
+PyQt5==5.15.11
+PyQt5-Qt5==5.15.15
+PyQt5_sip==12.15.0
+python-dateutil==2.9.0.post0
+pytz==2024.2
+PyYAML==6.0.2
+requests==2.32.3
+scikit-image==0.24.0
+scikit-learn==1.5.2
+scipy==1.14.1
+seaborn==0.13.2
+simsimd==6.2.1
+six==1.16.0
+smmap==5.0.1
+stringzilla==3.11.1
+sympy==1.13.2
+tensorboard==2.18.0
+tensorboard-data-server==0.7.2
+threadpoolctl==3.5.0
+tifffile==2024.12.12
+torch==2.4.1
+torchvision==0.19.1
+tqdm==4.66.5
+typing_extensions==4.12.2
+tzdata==2024.1
+ultralytics==8.2.95
+ultralytics-thop==2.0.6
+umap-learn==0.5.7
+urllib3==2.2.3
+Werkzeug==3.1.3
+```
 #### Step 4: Deactivate the Virtual Environment
 
 When you're finished working, deactivate the virtual environment to return to your system's default Python environment:
@@ -140,13 +221,15 @@ deactivate
 The project includes the following main scripts:
 
 - **CellPointLabeler.py**: A GUI tool for viewing and editing cell count point annotations.
+- **CellDataPrepCombined.py**: Prepares and splits the dataset into training, validation, and testing sets.
 - **SyntheticDataGen.py**: Generates synthetic cell images and annotations to balance the dataset.
 - **EmbeddingReduction.py**: Performs feature extraction and dimensionality reduction for visualization.
-- **CellDataPrepCombined.py**: Prepares and splits the dataset into training, validation, and testing sets.
 - **Main.py**: The main script for training the cell counting model.
 - **Model.py**: Defines the PyTorch model architecture for cell counting.
 - **DatasetHandler.py**: Handles data loading and preprocessing for the dataset.
 - **GeneratePredictions.py**: Generates predictions using a trained model and evaluates performance.
+- **ModelViz.py**: Creates a visual illustration of the CNN architecture using visualtorch.
+
 
 ---
 
@@ -199,6 +282,113 @@ python CellPointLabeler.py --batch --input-folder /path/to/parent_folder
 - **If `--input-folder` Is Not Provided**:
 
   The script will prompt you to select the parent folder via a dialog window.
+
+---
+
+
+## CellDataPrepCombined.py
+
+This script prepares and splits your dataset into training, validation, and testing sets based on cell counts.
+
+### Features
+
+- **Data Splitting**: Splits data based on cell counts.
+- **Bin Creation**: Organizes files into bins.
+- **Mode Selection**: 'univariate' or 'skewed' distribution strategies.
+- **File Management**: Copies ground truth CSV files and images to designated folders.
+- **Visualization**: Generates histograms and boxplots of cell count distributions.
+- **Customizable Parameters**: Adjust modes, bin sizes, and cell count limits.
+
+### Directory Structure
+
+Organize your data directory as follows:
+
+```
+IDCIA_v2/
+├── ground_truth/
+│   ├── image1.csv
+│   ├── image2.csv
+│   └── ...
+├── images/
+│   ├── image1.tiff
+│   ├── image2.tiff
+│   └── ...
+├── CellDataPrepCombined.py
+└── ...
+```
+
+### Usage
+
+#### Step 1: Prepare Your Data
+
+Ensure that:
+
+- Each image in `images/` has a corresponding CSV file in `ground_truth/`.
+- Images are in TIFF format.
+- Ground truth files contain accurate cell positions.
+
+#### Step 2: Configure the Script
+
+Open `CellDataPrepCombined.py` and update:
+
+
+##### Select the Mode
+
+```python
+mode = 'skewed'  # Options: 'univariate' or 'skewed'
+```
+
+#### Step 3: Run the Script
+
+Execute:
+
+```bash
+python CellDataPrepCombined.py
+```
+
+### Understanding the Output
+
+- **New Directories**:
+
+  ```
+  IDCIA_v2/
+  ├── skewed_ground_truth_training_data/
+  ├── skewed_ground_truth_training_images/
+  ├── skewed_testing_data/
+  ├── skewed_testing_images/
+  ├── skewed_validation_data/
+  ├── skewed_validation_images/
+  └── ...
+  ```
+
+- **Visualization Plots**:
+
+  - **Histogram**: Shows cell count distribution across datasets.
+  - **Boxplot**: Summarizes cell count distributions.
+
+### Customization
+
+#### Changing the Mode
+
+Modify the `mode` variable:
+
+```python
+mode = 'univariate'  # Options: 'univariate' or 'skewed'
+```
+
+#### Adjusting Bins and Cell Count Limits
+
+- **Number of Bins**:
+
+  ```python
+  n_bins = 20  # Number of bins
+  ```
+
+- **Cell Count Limit**:
+
+  ```python
+  if cell_count <= 800:  # Maximum cell count to include
+  ```
 
 ---
 
@@ -402,117 +592,6 @@ To support additional models:
        transform = weights.transforms()
        # Modify the model as needed
    ```
-
----
-
-## CellDataPrepCombined.py
-
-This script prepares and splits your dataset into training, validation, and testing sets based on cell counts.
-
-### Features
-
-- **Data Splitting**: Splits data based on cell counts.
-- **Bin Creation**: Organizes files into bins.
-- **Mode Selection**: 'univariate' or 'skewed' distribution strategies.
-- **File Management**: Copies ground truth CSV files and images to designated folders.
-- **Visualization**: Generates histograms and boxplots of cell count distributions.
-- **Customizable Parameters**: Adjust modes, bin sizes, and cell count limits.
-
-### Directory Structure
-
-Organize your data directory as follows:
-
-```
-IDCIA_v2/
-├── ground_truth/
-│   ├── image1.csv
-│   ├── image2.csv
-│   └── ...
-├── images/
-│   ├── image1.tiff
-│   ├── image2.tiff
-│   └── ...
-├── CellDataPrepCombined.py
-└── ...
-```
-
-### Usage
-
-#### Step 1: Prepare Your Data
-
-Ensure that:
-
-- Each image in `images/` has a corresponding CSV file in `ground_truth/`.
-- Images are in TIFF format.
-- Ground truth files contain accurate cell positions.
-
-#### Step 2: Configure the Script
-
-Open `CellDataPrepCombined.py` and update:
-
-##### Set the Base Folder Path
-
-```python
-base_folder = "C:/path/to/IDCIA_v2"  # Change this to your data directory
-```
-
-##### Select the Mode
-
-```python
-mode = 'skewed'  # Options: 'univariate' or 'skewed'
-```
-
-#### Step 3: Run the Script
-
-Execute:
-
-```bash
-python CellDataPrepCombined.py
-```
-
-### Understanding the Output
-
-- **New Directories**:
-
-  ```
-  IDCIA_v2/
-  ├── skewed_ground_truth_training_data/
-  ├── skewed_ground_truth_training_images/
-  ├── skewed_testing_data/
-  ├── skewed_testing_images/
-  ├── skewed_validation_data/
-  ├── skewed_validation_images/
-  └── ...
-  ```
-
-- **Visualization Plots**:
-
-  - **Histogram**: Shows cell count distribution across datasets.
-  - **Boxplot**: Summarizes cell count distributions.
-
-### Customization
-
-#### Changing the Mode
-
-Modify the `mode` variable:
-
-```python
-mode = 'univariate'  # Options: 'univariate' or 'skewed'
-```
-
-#### Adjusting Bins and Cell Count Limits
-
-- **Number of Bins**:
-
-  ```python
-  n_bins = 20  # Number of bins
-  ```
-
-- **Cell Count Limit**:
-
-  ```python
-  if cell_count <= 800:  # Maximum cell count to include
-  ```
 
 ---
 
@@ -749,3 +828,29 @@ The script requires the following parameters, which can be adjusted in the `main
 - **Batch Size**: Adjust the `batch_size` parameter in `get_data_loader()` for different computational capabilities.
 - **Model Configuration**: Ensure that the model architecture in `Model.py` matches the one used during training.
 - **GPU Usage**: Modify the device selection logic if you want to force the use of CPU or GPU.
+
+## ModelViz.py
+
+### Features
+
+- **Layered Visualization of the CNN**: Produces a visual representation of the `CellCounter` model.
+- **Custom Color Map**: Uses a predefined color scheme (shades of red and pink) for various layer types.
+- **Legend Support**: Includes a legend in the visualization for easy reference.
+- **Adjustable Input Shape**: Allows you to specify the input dimensions to the model for visualization.
+
+### Usage
+
+1. **Adjusting the Import Path**:  
+   Make sure that `from model import CellCounter` correctly references the location of your `Model.py` file. If your model is defined elsewhere, update the import path accordingly.
+
+2. **Running the Script**:  
+   Run the script using:
+
+   ```bash
+   python ModelViz.py
+   ```
+
+   This will generate a visualization of the CNN architecture in a new window.
+
+3. **Viewing the Visualization**:  
+   Once executed, the script displays a window showing the model’s layered architecture. Each block (layer) is color-coded according to the `color_map` defined in the script.
