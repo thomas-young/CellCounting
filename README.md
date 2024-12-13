@@ -69,8 +69,7 @@
   - [GeneratePredictions.py](#generatepredictionspy)
     - [Features](#features-6)
     - [Usage](#usage-5)
-      - [Generating Predictions](#generating-predictions)
-      - [Configuring Paths](#configuring-paths)
+      - [Generating Predictions with Ground Truth](#generating-predictions-with-ground-truth)
     - [Understanding the Output](#understanding-the-output-3)
     - [Customization](#customization-6)
   - [ModelViz.py](#modelvizpy)
@@ -764,51 +763,33 @@ train_dataset = CellDataset(
 - **Count Verification**: Uncomment the print statements in the `__getitem__` method to verify counts during data loading.
 
 ---
-
 ## GeneratePredictions.py
 
-This script generates predictions using a trained model and evaluates its performance.
+This script generates predictions using a trained model and evaluates its performance. It can operate in two modes:
+
+1. **With Ground Truth**: If ground truth density maps are available, it computes actual counts and evaluates performance metrics (MAE, RMSE).
+2. **Without Ground Truth (`--no_ground_truth`)**: If no ground truth maps are available, it only outputs the predicted counts for each image without computing error metrics.
 
 ### Features
 
 - **Model Loading**: Loads a trained model from a checkpoint file.
-- **Data Loading**: Creates a DataLoader for test images.
+- **Data Loading**: Creates a `DataLoader` for test images. Can operate with or without ground truth maps.
 - **Prediction Generation**: Generates predicted density maps and computes cell counts.
-- **Performance Evaluation**: Calculates Mean Absolute Error (MAE) and Root Mean Squared Error (RMSE) between predicted and actual cell counts.
-- **Results Saving**: Saves the predictions and actual counts to a CSV file for further analysis.
+- **Performance Evaluation**: Calculates Mean Absolute Error (MAE) and Root Mean Squared Error (RMSE) when ground truth is available.
+- **Results Saving**: Saves predictions to a CSV file. If ground truth is present, the CSV includes `image_path`, `actual_count`, and `predicted_count`. If no ground truth is provided, it includes `filename` and `prediction`.
 - **Device Compatibility**: Supports inference on GPU (CUDA or Apple MPS) or CPU.
 
 ### Usage
 
-#### Generating Predictions
+#### Generating Predictions with Ground Truth
 
-To generate predictions and evaluate the model, run:
+To generate predictions and evaluate the model (assuming ground truth maps exist), run:
 
 ```bash
-python GeneratePredictions.py
+python GeneratePredictions.py --checkpoint_path cell_counter.pth \
+                              --image_dir IDCIA/test/images \
+                              --output_file predictions.csv
 ```
-
-#### Configuring Paths
-
-The script requires the following parameters, which can be adjusted in the `main()` function:
-
-- **Checkpoint Path**: Path to the saved model weights.
-
-  ```python
-  checkpoint_path = "cell_counter.pth"
-  ```
-
-- **Image Directory**: Directory containing test images.
-
-  ```python
-  image_dir = "IDCIA/test/images"
-  ```
-
-- **Output File**: Path to save the predictions CSV file.
-
-  ```python
-  output_file = "predictions.csv"
-  ```
 
 ### Understanding the Output
 
