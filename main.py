@@ -1,3 +1,15 @@
+'''
+File: main.py
+Author: Abdurahman Mohammed
+Co-Author: Thomas Young
+Co-Author: GPT-o1
+Generative AI Usage: GPT-o1 was used to add tensor-board visualization of training and to implement
+augmentations applied at train time.
+Date: 2024-12-13
+Description: A Python script that defines the augmentations applied to training data,
+defines the loss function, and servas as the entry point to model training.
+'''
+
 import torch
 import torch.nn as nn
 import torch.optim as optim

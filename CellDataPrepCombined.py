@@ -1,3 +1,11 @@
+'''
+File: CellDataPrepCombined.py
+Author: Sam Good
+Co-Author: Tom Young
+Date: 2024-12-13
+Description: A Python script that splits data into training, test, and validation sets.
+'''
+
 import os
 import pandas as pd
 import numpy as np

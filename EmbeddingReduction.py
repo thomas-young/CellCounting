@@ -1,3 +1,14 @@
+'''
+File: EmbeddingReduction.py
+Author: Thomas Young
+Co-Author: GPT-o1
+Generative AI Usage: GPT-o1 was used to add argument parser and to remove the last layer from each model
+Date: 2024-11-14
+Description: A Python script that extracts embeddings using a specified pre-trained model,
+applies dimensionality reduction (UMAP or t-SNE) to these embeddings, and visualizes
+the embeddings colored by the number of cells present in the corresponding images.
+'''
+
 import argparse
 import torch
 import torchvision.transforms as transforms
@@ -8,6 +19,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import pandas as pd
+from tkinter import Tk, filedialog
 
 # Import UMAP and t-SNE
 try:
@@ -20,12 +32,10 @@ from sklearn.manifold import TSNE
 # Enable interactive plots for 3D visualization
 from mpl_toolkits.mplot3d import Axes3D  # Required for 3D plotting
 
-# Custom dataset class
 class ImageDataset(Dataset):
     def __init__(self, image_paths, transform=None):
         self.image_paths = image_paths
         self.transform = transform
-        # Filter out invalid images
         self.valid_indices = []
         for idx, path in enumerate(self.image_paths):
             try:
@@ -64,28 +74,24 @@ def get_model_and_transform(model_name):
         weights = ResNet50_Weights.DEFAULT
         model = resnet50(weights=weights)
         transform = weights.transforms()
-        # Remove the classification head
         model = torch.nn.Sequential(*list(model.children())[:-1])
     elif model_name == 'vgg16':
         from torchvision.models import vgg16, VGG16_Weights
         weights = VGG16_Weights.DEFAULT
         model = vgg16(weights=weights)
         transform = weights.transforms()
-        # Remove the classification layers
         model = model.features
     elif model_name == 'inception_v3':
         from torchvision.models import inception_v3, Inception_V3_Weights
         weights = Inception_V3_Weights.DEFAULT
         model = inception_v3(weights=weights, aux_logits=False)
         transform = weights.transforms()
-        # Remove the classification head
         model.fc = torch.nn.Identity()
     elif model_name == 'densenet121':
         from torchvision.models import densenet121, DenseNet121_Weights
         weights = DenseNet121_Weights.DEFAULT
         model = densenet121(weights=weights)
         transform = weights.transforms()
-        # Remove classification layers
         model = torch.nn.Sequential(
             *(list(model.features) + [torch.nn.ReLU(inplace=True), torch.nn.AdaptiveAvgPool2d((1, 1))])
         )
@@ -94,7 +100,6 @@ def get_model_and_transform(model_name):
         weights = MobileNet_V2_Weights.DEFAULT
         model = mobilenet_v2(weights=weights)
         transform = weights.transforms()
-        # Remove classification layers
         model = torch.nn.Sequential(
             *(list(model.features) + [torch.nn.AdaptiveAvgPool2d((1, 1))])
         )
@@ -103,21 +108,18 @@ def get_model_and_transform(model_name):
         weights = EfficientNet_B0_Weights.DEFAULT
         model = efficientnet_b0(weights=weights)
         transform = weights.transforms()
-        # Remove classification layers
         model = torch.nn.Sequential(*(list(model.children())[:-1]))
     elif model_name == 'resnext50_32x4d':
         from torchvision.models import resnext50_32x4d, ResNeXt50_32X4D_Weights
         weights = ResNeXt50_32X4D_Weights.DEFAULT
         model = resnext50_32x4d(weights=weights)
         transform = weights.transforms()
-        # Remove classification layers
         model = torch.nn.Sequential(*list(model.children())[:-1])
     elif model_name == 'vit_b_16':
         from torchvision.models import vit_b_16, ViT_B_16_Weights
         weights = ViT_B_16_Weights.DEFAULT
         model = vit_b_16(weights=weights)
         transform = weights.transforms()
-        # Remove classification head
         model.heads = torch.nn.Identity()
     else:
         raise ValueError(f"Model '{model_name}' is not supported.")
@@ -131,7 +133,28 @@ def main():
     parser.add_argument('--save_embeddings', type=str, default='', help='Path to save embeddings (optional)')
     parser.add_argument('--reduction', type=str, default='umap', choices=['umap', 'tsne'], help='Dimensionality reduction method')
     parser.add_argument('--n_components', type=int, default=3, help='Number of dimensions for projection (2 or 3)')
+    parser.add_argument('--base_dir', type=str, default='', help='Base directory containing images and ground truth')
     args = parser.parse_args()
+
+    # If base_dir is not provided, prompt the user to select one
+    if not args.base_dir:
+        Tk().withdraw()  # Hide root window
+        args.base_dir = filedialog.askdirectory(title='Select Base Directory')
+        if not args.base_dir:
+            print("No directory selected. Exiting.")
+            return
+
+    # Validate the chosen directory
+    real_image_dir = os.path.join(args.base_dir, 'images')
+    synthetic_image_dir = os.path.join(args.base_dir, 'synthetic_images')
+    real_ground_truth_dir = os.path.join(args.base_dir, 'ground_truth')
+    synthetic_ground_truth_dir = os.path.join(args.base_dir, 'synthetic_ground_truth')
+
+    if not (os.path.isdir(real_image_dir) and os.path.isdir(synthetic_image_dir) and
+            os.path.isdir(real_ground_truth_dir) and os.path.isdir(synthetic_ground_truth_dir)):
+        print("The selected directory does not contain the required subdirectories:")
+        print("'images', 'synthetic_images', 'ground_truth', 'synthetic_ground_truth'")
+        return
 
     # Get the model and transformation
     try:
@@ -143,13 +166,6 @@ def main():
     device = torch.device('cuda' if args.use_gpu and torch.cuda.is_available() else 'cpu')
     model = model.to(device)
     model.eval()
-
-    # Hardcoded image and ground truth directories
-    base_dir = '/Users/tomyoung/Downloads/CellCountData/'
-    real_image_dir = os.path.join(base_dir, 'images')
-    synthetic_image_dir = os.path.join(base_dir, 'synthetic_images')
-    real_ground_truth_dir = os.path.join(base_dir, 'ground_truth')
-    synthetic_ground_truth_dir = os.path.join(base_dir, 'synthetic_ground_truth')
 
     # Collect image paths
     real_image_paths = glob.glob(os.path.join(real_image_dir, '*'))
@@ -163,17 +179,15 @@ def main():
         print("No synthetic images found. Please check the path:", synthetic_image_dir)
         return
 
-    # Collect cell counts for real images
+    # Collect cell counts
     real_counts = [get_cell_count(path, real_ground_truth_dir) for path in real_image_paths]
-
-    # Collect cell counts for synthetic images
     synthetic_counts = [get_cell_count(path, synthetic_ground_truth_dir) for path in synthetic_image_paths]
 
     # Combine image paths and counts
     all_image_paths = real_image_paths + synthetic_image_paths
     cell_counts = real_counts + synthetic_counts
 
-    # Labels indicating whether each image is real or synthetic
+    # Labels for classes
     classes = ['Real'] * len(real_image_paths) + ['Synthetic'] * len(synthetic_image_paths)
 
     # Create dataset and dataloader
@@ -186,10 +200,9 @@ def main():
         for batch in dataloader:
             batch = batch.to(device)
             outputs = model(batch)
-            # Handle outputs for models that return tuples
             if isinstance(outputs, tuple):
                 outputs = outputs[0]
-            outputs = outputs.view(outputs.size(0), -1)  # Flatten
+            outputs = outputs.view(outputs.size(0), -1)
             features.append(outputs.cpu().numpy())
 
     features = np.vstack(features)
@@ -219,18 +232,11 @@ def main():
     if args.n_components == 3:
         fig = plt.figure(figsize=(10, 7))
         ax = fig.add_subplot(111, projection='3d')
-
-        # Define markers for each class
         marker_dict = {'Real': 'o', 'Synthetic': '^'}
-
-        # Get unique classes
         unique_classes = ['Real', 'Synthetic']
-
-        # Normalize cell counts for consistent coloring
         cell_counts_array = np.array(cell_counts)
         norm = plt.Normalize(vmin=cell_counts_array.min(), vmax=cell_counts_array.max())
 
-        # Plot each class separately
         for cls in unique_classes:
             idx = [i for i, c in enumerate(classes) if c == cls]
             sc = ax.scatter(
@@ -253,18 +259,11 @@ def main():
         plt.show()
     else:
         plt.figure(figsize=(10, 7))
-
-        # Define markers for each class
         marker_dict = {'Real': 'o', 'Synthetic': '^'}
-
-        # Get unique classes
         unique_classes = ['Real', 'Synthetic']
-
-        # Normalize cell counts for consistent coloring
         cell_counts_array = np.array(cell_counts)
         norm = plt.Normalize(vmin=cell_counts_array.min(), vmax=cell_counts_array.max())
 
-        # Plot each class separately
         for cls in unique_classes:
             idx = [i for i, c in enumerate(classes) if c == cls]
             scatter = plt.scatter(

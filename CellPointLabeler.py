@@ -1,3 +1,13 @@
+'''
+File: CellPointLabeler.py
+Author: Thomas Young
+Co-Author: GPT-o1
+Generative AI Usage: GPT-o1 was used to help build GUI 
+Date: 2024-12-13
+Description: A Python script that provides a gui for visualzing and editing cell point labels
+and visualizing/exporting gaussian maps
+'''
+
 import sys
 import os
 import glob
@@ -211,7 +221,6 @@ class GaussianWorker(QThread):
         self.stop_requested = False
         self.mutex = QMutex()
         self.worker_id = worker_id
-
     def run(self):
         """
         Generate the Gaussian density map.
@@ -241,14 +250,20 @@ class GaussianWorker(QThread):
         scaled_sigma = self.sigma * scale
         density_map = gaussian_filter(density_map, sigma=scaled_sigma)
 
-        # Resize density_map back to original size
+        # Resize density_map back to original size (UNNORMALIZED)
         density_map_resized = np.array(
             Image.fromarray(density_map).resize((width, height), Image.BILINEAR)
         )
 
-        # Apply colormap for display purposes
+        # Normalize only for display
+        norm_density_map = density_map_resized.copy()
+        max_val = norm_density_map.max()
+        if max_val > 0:
+            norm_density_map /= max_val
+
+        # Apply colormap to the normalized data for display purposes
         colormap = cm.get_cmap(self.colormap_name)
-        colored_density_map = colormap(density_map_resized)
+        colored_density_map = colormap(norm_density_map)
         colored_density_map = (colored_density_map[:, :, :3] * 255).astype(np.uint8)
 
         height, width, channel = colored_density_map.shape
@@ -267,6 +282,7 @@ class GaussianWorker(QThread):
             if self.stop_requested:
                 return
 
+        # Emit the original UNNORMALIZED density_map_resized for saving
         self.result_ready.emit(self.worker_id, pixmap, density_map_resized)
 
     def stop(self):
